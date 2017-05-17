@@ -175,6 +175,7 @@ int main(int argc, char *argv[]) {
 			fgets(send_buffer,SEGMENT_SIZE,fin); //get one line of data from the file
 			sprintf(temp_buffer,"PACKET %d ",counter);  //create packet header with Sequence number
 			send_CRC = CRC(send_buffer);   // Making CRC
+			counter++;
 			sprintf(SCRC, "%d ", send_CRC);   // adding CRC
 			strcat(temp_buffer, send_buffer);   //append data to packet header
 			strcat(SCRC, temp_buffer);

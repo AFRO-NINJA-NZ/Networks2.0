@@ -42,7 +42,6 @@
 #endif
 
 #include "myrandomizer.h"
-#define GENERATOR 0x8005 //0x8005, generator for polynomial division
 
 using namespace std;
 
@@ -57,16 +56,37 @@ int numOfPacketsUncorrupted=0;
 
 int packets_damagedbit=0;
 int packets_lostbit=0;
-unsigned int send_CRC;
-unsigned int recv_CRC;
-
-unsigned int CRC(char *buffer);
 
 //*******************************************************************
 //Function to save lines and discard the header
 //*******************************************************************
 //You are allowed to change this. You will need to alter the NUMBER_OF_WORDS_IN_THE_HEADER if you add a CRC
 #define NUMBER_OF_WORDS_IN_THE_HEADER 2
+#define GENERATOR 0x8005 //0x8005, generator for polynomial division
+
+
+unsigned int CRCpolynomial(char *buffer){
+	unsigned char i;
+	unsigned int rem=0x0000;
+    unsigned int bufsize=strlen(buffer);
+
+	while(bufsize--!=0){
+		for(i=0x80;i!=0;i/=2){
+			if((rem&0x8000)!=0){
+				rem=rem<<1;
+				rem^=GENERATOR;
+			} else{
+	   	       rem=rem<<1;
+		    }
+	  		if((*buffer&i)!=0){
+			   rem^=GENERATOR;
+			}
+		}
+		buffer++;
+	}
+	rem=rem&0xffff;
+	return rem;
+}
 
 void save_line_without_header(char * receive_buffer,FILE *fout){
 	//char *sep = " "; //separator is the space character
@@ -102,6 +122,50 @@ void save_line_without_header(char * receive_buffer,FILE *fout){
 		printf("Error in writing to write...\n");
 		exit(1);
 	}
+}
+
+int corruptCheck(char * receive_buffer, int *counter){
+	unsigned int crc = 0;   // starts as false
+    int sequenceNum = 0;
+	char *token;
+    if(strncmp(receive_buffer,"CRC",3)==0){
+        sscanf(receive_buffer, "CRC %d",&crc);
+        token = strtok(receive_buffer, " ");// token is 'CRC'
+        token = strtok(NULL, " ");          // token is '#####'
+        crc = atoi(token);
+        token = strtok(NULL, "\0");         // token is remainder of string
+        strcpy(receive_buffer, token);      // receive_buffer is remainder of string
+        if(crc != CRCpolynomial(receive_buffer)){
+            return 1;                       // damaged packet
+        } else {
+            if(strncmp(receive_buffer,"PACKET",6)==0){
+                sscanf(receive_buffer, "PACKET %d",&sequenceNum);
+                token = strtok(receive_buffer, " ");// token is 'PACKET'
+                token = strtok(NULL, " ");          // token is '#'
+                sequenceNum = atoi(token);
+                *counter = sequenceNum;                   // change value of counter to the seqNum
+                token = strtok(NULL, "\0");         // token is remainder of string
+                strcpy(receive_buffer, token);      // receive_buffer is remainder of string
+                return 0;                       // no damage detected
+            }
+						return 0;
+        }
+    }
+}
+
+
+void addAckHeader(char *send_buffer, int counter){
+    char temp_buffer[80];
+    int crc = 0;
+    sprintf(temp_buffer,"ACKNOW %d",counter); // temp_buffer now = ACKNOW #
+    strcat(temp_buffer,send_buffer);
+    strcpy(send_buffer,temp_buffer);
+    // get crc of send_buffer
+    crc = CRCpolynomial(send_buffer);
+    //add a header to the packet with the crc number
+    sprintf(temp_buffer,"CRC %d ",crc);
+    strcat(temp_buffer,send_buffer);
+    strcpy(send_buffer,temp_buffer);
 }
 
 #define WSVERS MAKEWORD(2,0)
@@ -196,8 +260,8 @@ int main(int argc, char *argv[]) {
     }
 
     cout << "==============<< UDP SERVER >>=============" << endl;
-    cout << "channel can damage packets = " << packets_damagedbit << endl;
-    cout << "channel can lose packets = " << packets_lostbit << endl;
+    cout << "channel can damage packets=" << packets_damagedbit << endl;
+    cout << "channel can lose packets=" << packets_lostbit << endl;
 
 	 freeaddrinfo(result); //free the memory allocated by the getaddrinfo
 	                       //function for the server's address, as it is
@@ -212,16 +276,12 @@ int main(int argc, char *argv[]) {
 
 //********************************************************************
 
+	int crc = 0;
+	int expectedAck = 0;
+
 //INFINITE LOOP
 //********************************************************************
    while (1) {
-//********************************************************************
-//RECEIVE
-//********************************************************************
-//printf("Waiting... \n");
-		addrlen = sizeof(clientAddress); //IPv4 & IPv6-compliant
-		memset(receive_buffer,0,sizeof(receive_buffer));
-		bytes = recvfrom(s, receive_buffer, SEGMENT_SIZE, 0, (struct sockaddr*)&clientAddress, &addrlen);
 
 //********************************************************************
 //IDENTIFY UDP client's IP address and port number.
@@ -237,9 +297,19 @@ int main(int argc, char *argv[]) {
                   clientService, sizeof(clientService),
                   NI_NUMERICHOST);
 
+	crc = corruptCheck(receive_buffer, &counter);
+
+//********************************************************************
+//RECEIVE
+//********************************************************************
+//printf("Waiting... \n");
+		addrlen = sizeof(clientAddress); //IPv4 & IPv6-compliant
+		memset(receive_buffer,0,sizeof(receive_buffer));
+		bytes = recvfrom(s, receive_buffer, SEGMENT_SIZE, 0, (struct sockaddr*)&clientAddress, &addrlen);
 
 
-    printf("\nReceived a packet of size %d bytes from <<<UDP Client>>> with IP address: %s, at Port: %s\n", bytes, clientHost, clientService);
+
+    printf("\nReceived a packet of size %d bytes from <<<UDP Client>>> with IP address:%s, at Port:%s\n",bytes,clientHost, clientService);
 
 //********************************************************************
 //PROCESS RECEIVED PACKET
@@ -260,24 +330,33 @@ int main(int argc, char *argv[]) {
 
 		if ((bytes < 0) || (bytes == 0)) break;
 
-
-
 		printf("\n================================================\n");
 		printf("RECEIVED --> %s \n",receive_buffer);
 
-		if (strncmp(receive_buffer,"PACKET",6)==0)  {
-			sscanf(receive_buffer, "PACKET %d",&counter);
+		//if (strncmp(receive_buffer,"PACKET",6)==0)  {
+		//	sscanf(receive_buffer, "PACKET %d",&counter);
 //********************************************************************
 //SEND ACK
 //********************************************************************
+
+		crc = corruptCheck(receive_buffer, &counter);
+
+		if(crc == 1)printf("**Packet corupted**\n");
+
+		if(crc == 0){
 			sprintf(send_buffer,"ACK %d \r\n",counter);
 
 			//send ACK ureliably
+			addAckHeader(send_buffer, counter);
 
 			send_unreliably(s,send_buffer,(sockaddr*)&clientAddress );
 
 			//store the packet's data into a file
 			save_line_without_header(receive_buffer,fout);
+			if(expectedAck == counter){
+                    save_line_without_header(receive_buffer,fout);
+                    expectedAck++;
+                }
 		}
 		else {
 			if (strncmp(receive_buffer,"CLOSE",5)==0)  {//if client says "CLOSE", the last packet for the file was sent. Close the file
@@ -301,29 +380,6 @@ int main(int argc, char *argv[]) {
    cout << "numOfPacketsLost=" << numOfPacketsLost << endl;
    cout << "numOfPacketsUncorrupted=" << numOfPacketsUncorrupted << endl;
    cout << "===========================================" << endl;
-
+	cout << "crc num: " << crc << endl;
    exit(0);
-}
-
-unsigned int CRC(char *buffer){
-	unsigned char i;
-	unsigned int rem=0x0000;
-    unsigned int bufsize=strlen(buffer);
-
-	while(bufsize--!=0){
-		for(i=0x80;i!=0;i/=2){
-			if((rem&0x8000)!=0){
-				rem=rem<<1;
-				rem^=GENERATOR;
-			} else{
-	   	       rem=rem<<1;
-		    }
-	  		if((*buffer&i)!=0){
-			   rem^=GENERATOR;
-			}
-		}
-		buffer++;
-	}
-	rem=rem&0xffff;
-	return rem;
 }
