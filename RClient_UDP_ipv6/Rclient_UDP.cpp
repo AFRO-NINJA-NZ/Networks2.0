@@ -42,6 +42,7 @@
 #endif
 
 #include "myrandomizer.h"
+#define GENERATOR 0x8005 //0x8005, generator for polynomial division
 
 using namespace std;
 
@@ -60,6 +61,10 @@ int numOfPacketsUncorrupted=0;
 
 int packets_damagedbit=0;
 int packets_lostbit=0;
+unsigned int send_CRC;
+unsigned int recv_CRC;
+
+unsigned int CRC(char *buffer);
 
 /////////////////////////////////////////////////////////////////////////////////////////
 int main(int argc, char *argv[]) {
@@ -149,6 +154,7 @@ int main(int argc, char *argv[]) {
 //*******************************************************************
    int counter=0;
    char temp_buffer[BUFFER_SIZE];
+	 char SCRC[sizeof(unsigned int)];
    FILE *fin=fopen("data_for_transmission.txt","rb"); //original
 
 //In text mode, carriage return�linefeed combinations
@@ -168,11 +174,13 @@ int main(int argc, char *argv[]) {
 		if (!feof(fin)) {
 			fgets(send_buffer,SEGMENT_SIZE,fin); //get one line of data from the file
 			sprintf(temp_buffer,"PACKET %d ",counter);  //create packet header with Sequence number
-			counter++;
-			strcat(temp_buffer,send_buffer);   //append data to packet header
-			strcpy(send_buffer,temp_buffer);   //the complete packet
+			send_CRC = CRC(send_buffer);   // Making CRC
+			sprintf(SCRC, "%d ", send_CRC);   // adding CRC
+			strcat(temp_buffer, send_buffer);   //append data to packet header
+			strcat(SCRC, temp_buffer);
+			strcpy(send_buffer, SCRC);   //the complete packet
 			printf("\n======================================================\n");
-			cout << "calling send_unreliably, to deliver data of size " << strlen(send_buffer) << endl;
+			cout << "calling send_unreliably, to deliver data of size " << strlen(send_buffer) << " where info is " << send_buffer << endl;
 			send_unreliably(s,send_buffer,(result->ai_addr)); //send the packet to the unreliable data channel
 			Sleep(1);  //sleep for 1 millisecond
 //********************************************************************
@@ -181,6 +189,7 @@ int main(int argc, char *argv[]) {
 			addrlen = sizeof(remoteaddr); //IPv4 & IPv6-compliant
 			memset(receive_buffer,0,sizeof(receive_buffer));
 			bytes = recvfrom(s, receive_buffer, 78, 0,(struct sockaddr*)&remoteaddr,&addrlen);
+
 //********************************************************************
 //IDENTIFY server's IP address and port number.
 //********************************************************************
@@ -242,4 +251,27 @@ int main(int argc, char *argv[]) {
    cout << "===========================================" << endl;
 
    exit(0);
+}
+
+unsigned int CRC(char *buffer){
+	unsigned char i;
+	unsigned int rem=0x0000;
+    unsigned int bufsize=strlen(buffer);
+
+	while(bufsize--!=0){
+		for(i=0x80;i!=0;i/=2){
+			if((rem&0x8000)!=0){
+				rem=rem<<1;
+				rem^=GENERATOR;
+			} else{
+	   	       rem=rem<<1;
+		    }
+	  		if((*buffer&i)!=0){
+			   rem^=GENERATOR;
+			}
+		}
+		buffer++;
+	}
+	rem=rem&0xffff;
+	return rem;
 }

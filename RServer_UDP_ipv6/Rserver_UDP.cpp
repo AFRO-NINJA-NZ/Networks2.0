@@ -42,6 +42,7 @@
 #endif
 
 #include "myrandomizer.h"
+#define GENERATOR 0x8005 //0x8005, generator for polynomial division
 
 using namespace std;
 
@@ -56,6 +57,10 @@ int numOfPacketsUncorrupted=0;
 
 int packets_damagedbit=0;
 int packets_lostbit=0;
+unsigned int send_CRC;
+unsigned int recv_CRC;
+
+unsigned int CRC(char *buffer);
 
 //*******************************************************************
 //Function to save lines and discard the header
@@ -255,6 +260,8 @@ int main(int argc, char *argv[]) {
 
 		if ((bytes < 0) || (bytes == 0)) break;
 
+
+
 		printf("\n================================================\n");
 		printf("RECEIVED --> %s \n",receive_buffer);
 
@@ -296,4 +303,27 @@ int main(int argc, char *argv[]) {
    cout << "===========================================" << endl;
 
    exit(0);
+}
+
+unsigned int CRC(char *buffer){
+	unsigned char i;
+	unsigned int rem=0x0000;
+    unsigned int bufsize=strlen(buffer);
+
+	while(bufsize--!=0){
+		for(i=0x80;i!=0;i/=2){
+			if((rem&0x8000)!=0){
+				rem=rem<<1;
+				rem^=GENERATOR;
+			} else{
+	   	       rem=rem<<1;
+		    }
+	  		if((*buffer&i)!=0){
+			   rem^=GENERATOR;
+			}
+		}
+		buffer++;
+	}
+	rem=rem&0xffff;
+	return rem;
 }
