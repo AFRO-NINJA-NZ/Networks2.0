@@ -124,33 +124,77 @@ void save_line_without_header(char * receive_buffer,FILE *fout){
 	}
 }
 
-int corruptCheck(char * receive_buffer, int *counter){
-	unsigned int crc = 0;   // starts as false
-    int sequenceNum = 0;
-	char *token;
-    if(strncmp(receive_buffer,"CRC",3)==0){
-        sscanf(receive_buffer, "CRC %d",&crc);
-        token = strtok(receive_buffer, " ");// token is 'CRC'
-        token = strtok(NULL, " ");          // token is '#####'
-        crc = atoi(token);
-        token = strtok(NULL, "\0");         // token is remainder of string
-        strcpy(receive_buffer, token);      // receive_buffer is remainder of string
-        if(crc != CRCpolynomial(receive_buffer)){
-            return 1;                       // damaged packet
-        } else {
-            if(strncmp(receive_buffer,"PACKET",6)==0){
-                sscanf(receive_buffer, "PACKET %d",&sequenceNum);
-                token = strtok(receive_buffer, " ");// token is 'PACKET'
-                token = strtok(NULL, " ");          // token is '#'
-                sequenceNum = atoi(token);
-                *counter = sequenceNum;                   // change value of counter to the seqNum
-                token = strtok(NULL, "\0");         // token is remainder of string
-                strcpy(receive_buffer, token);      // receive_buffer is remainder of string
-                return 0;                       // no damage detected
-            }
-						return 0;
-        }
+void extractTokens(char *str, int &CRC, char *command, int &packetNumber, char *data){
+	char * pch;
+
+  int tokenCounter=0;
+  printf ("Splitting string \"%s\" into tokens:\n\n",str);
+
+  while (1)
+  {
+	 if(tokenCounter ==0){
+       pch = strtok (str, " ,.-'\r\n'");
+    } else {
+		 pch = strtok (NULL, " ,.-'\r\n'");
+	 }
+	 if(pch == NULL) break;
+	 printf ("Token[%d], with %d characters = %s\n",tokenCounter,int(strlen(pch)),pch);
+
+    switch(tokenCounter){
+      case 0: CRC = atoi(pch);
+			     break;
+      case 1: //command = new char[strlen(pch)];
+			     strcpy(command, pch);
+
+		        printf("command = %s, %d characters\n", command, int(strlen(command)));
+              break;
+		  case 2: packetNumber = atoi(pch);
+		        break;
+		  case 3: //data = new char[strlen(pch)];
+			     strcpy(data, pch);
+
+		        printf("data = %s, %d characters\n", data, int(strlen(data)));
+              break;
     }
+
+	 tokenCounter++;
+  }
+}
+
+int corruptCheck(char * receive_buffer, int *counter){
+	int CRC = -1;   // starts as false
+	char command[256];
+	char data[256];
+	int packetNumber = -1;
+
+	memset(data,0,sizeof(data));
+	memset(command,0,sizeof(command));
+
+	extractTokens(receive_buffer, CRC, command, packetNumber, data);
+	return CRC;
+	// char *token;
+  //   if(strncmp(receive_buffer,"CRC",3)==0){
+  //       sscanf(receive_buffer, "CRC %d",&crc);
+  //       token = strtok(receive_buffer, " ");// token is 'CRC'
+  //       token = strtok(NULL, " ");         // token is '#####'
+	// 		crc = atoi(token);
+  //       token = strtok(NULL, "\0");         // token is remainder of string
+  //       strcpy(receive_buffer, token);      // receive_buffer is remainder of string
+  //       if(crc != CRCpolynomial(receive_buffer)){
+  //           return 1;                       // damaged packet
+  //       } else {
+  //           if(strncmp(receive_buffer,"PACKET",6)==0){
+  //               sscanf(receive_buffer, "PACKET %d",&sequenceNum);
+  //               token = strtok(receive_buffer, " ");// token is 'PACKET'
+  //               token = strtok(NULL, " ");          // token is '#'
+  //               sequenceNum = atoi(token);
+  //               *counter = sequenceNum;                   // change value of counter to the seqNum
+  //               token = strtok(NULL, "\0");         // token is remainder of string
+  //               strcpy(receive_buffer, token);      // receive_buffer is remainder of string
+  //               return 0;                       // no damage detected
+  //           }
+  //       }
+  //   }
 }
 
 
@@ -269,9 +313,9 @@ int main(int argc, char *argv[]) {
 //********************************************************************
 // Open file to save the incoming packets
 //********************************************************************
-//In text mode, carriage return�linefeed combinations
+//In text mode, carriage return–linefeed combinations
 //are translated into single linefeeds on input, and
-//linefeed characters are translated to carriage return�linefeed combinations on output.
+//linefeed characters are translated to carriage return–linefeed combinations on output.
 	 FILE *fout=fopen("data_received.txt","w");
 
 //********************************************************************
@@ -381,5 +425,6 @@ int main(int argc, char *argv[]) {
    cout << "numOfPacketsUncorrupted=" << numOfPacketsUncorrupted << endl;
    cout << "===========================================" << endl;
 	cout << "crc num: " << crc << endl;
+	cout << "Check Before " << corruptCheck(receive_buffer, &counter) << endl;
    exit(0);
 }

@@ -66,6 +66,55 @@ unsigned int recv_CRC;
 
 unsigned int CRC(char *buffer);
 
+
+// Storing data in a custom vector
+
+struct Data {
+	string data;
+	bool acked;
+	clock_t timer;
+};
+
+class Client_vector {
+private:
+	Data *allData[200000];
+	int count;
+public:
+	Client_vector() {
+		count = 0;
+		for (int i = 0; i<200000; ++i) {
+			allData[i] = NULL;
+		}
+	};
+	~Client_vector() {};
+	void InsertLine(string data);
+	bool AckedStatus(int position);
+	clock_t TimerValue (int position);
+};
+
+void Client_vector::InsertLine(string data) {
+	allData[count]->data = data;
+	allData[count]->acked = false;
+	allData[count]->timer = clock();
+}
+
+bool Client_vector::AckedStatus(int position) {
+	//if (position < count) {
+		return allData[position]->acked;
+	//}
+}
+
+clock_t Client_vector::TimerValue (int position) {
+	//if (position < count) {
+		return allData[position]->timer;
+	// }
+}
+
+
+
+
+
+
 /////////////////////////////////////////////////////////////////////////////////////////
 int main(int argc, char *argv[]) {
 //*******************************************************************
@@ -176,7 +225,7 @@ int main(int argc, char *argv[]) {
 			sprintf(temp_buffer,"PACKET %d ",counter);  //create packet header with Sequence number
 			send_CRC = CRC(send_buffer);   // Making CRC
 			counter++;
-			sprintf(SCRC, "%d ", send_CRC);   // adding CRC
+			sprintf(SCRC, "CRC %d ", send_CRC);   // adding CRC
 			strcat(temp_buffer, send_buffer);   //append data to packet header
 			strcat(SCRC, temp_buffer);
 			strcpy(send_buffer, SCRC);   //the complete packet
@@ -184,6 +233,8 @@ int main(int argc, char *argv[]) {
 			cout << "calling send_unreliably, to deliver data of size " << strlen(send_buffer) << " where info is " << send_buffer << endl;
 			send_unreliably(s,send_buffer,(result->ai_addr)); //send the packet to the unreliable data channel
 			Sleep(1);  //sleep for 1 millisecond
+
+			//CRC Packet %d
 //********************************************************************
 //RECEIVE
 //********************************************************************
