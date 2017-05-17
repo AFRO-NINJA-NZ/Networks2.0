@@ -1,12 +1,12 @@
 //159.334 - Networks
-// CLIENT: prototype for assignment 2. 
+// CLIENT: prototype for assignment 2.
 //Note that this progam is not yet cross-platform-capable
 // This code is different than the one used in previous semesters...
 //************************************************************************/
-//RUN WITH: Rclient_UDP 127.0.0.1 1235 0 0 
-//RUN WITH: Rclient_UDP 127.0.0.1 1235 0 1 
-//RUN WITH: Rclient_UDP 127.0.0.1 1235 1 0 
-//RUN WITH: Rclient_UDP 127.0.0.1 1235 1 1 
+//RUN WITH: Rclient_UDP 127.0.0.1 1235 0 0
+//RUN WITH: Rclient_UDP 127.0.0.1 1235 0 1
+//RUN WITH: Rclient_UDP 127.0.0.1 1235 1 0
+//RUN WITH: Rclient_UDP 127.0.0.1 1235 1 1
 //************************************************************************/
 
 //---
@@ -14,15 +14,15 @@
 	#include <unistd.h>
 	#include <errno.h>
 	#include <stdlib.h>
-	#include <stdio.h> 
+	#include <stdio.h>
 	#include <string.h>
-	#include <sys/types.h> 
-	#include <sys/socket.h> 
+	#include <sys/types.h>
+	#include <sys/socket.h>
 	#include <arpa/inet.h>
-	#include <netinet/in.h> 
+	#include <netinet/in.h>
 	#include <netdb.h>
     #include <iostream>
-#elif defined _WIN32 
+#elif defined _WIN32
 
 
 	//Ws2_32.lib
@@ -35,7 +35,7 @@
 
 	#include <winsock2.h>
 	#include <ws2tcpip.h>
-	#include <stdio.h> 
+	#include <stdio.h>
 	#include <string.h>
 	#include <stdlib.h>
 	#include <iostream>
@@ -70,23 +70,23 @@ int main(int argc, char *argv[]) {
    char portNum[NI_MAXSERV];
    struct addrinfo *result = NULL;
    struct addrinfo hints;
-	
+
    memset(&localaddr, 0, sizeof(localaddr));  //clean up
-   memset(&remoteaddr, 0, sizeof(remoteaddr));//clean up  
+   memset(&remoteaddr, 0, sizeof(remoteaddr));//clean up
    randominit();
    SOCKET s;
    char send_buffer[BUFFER_SIZE],receive_buffer[BUFFER_SIZE];
    int n,bytes,addrlen;
-	
-   
+
+
 	addrlen=sizeof(struct sockaddr);
-	
-	
+
+
 	memset(&hints, 0, sizeof(struct addrinfo));
 	hints.ai_family = AF_INET6;
 	hints.ai_socktype = SOCK_DGRAM;
 	hints.ai_protocol = IPPROTO_UDP;
-	
+
 //********************************************************************
 // WSSTARTUP
 //********************************************************************
@@ -101,23 +101,23 @@ int main(int argc, char *argv[]) {
 	   printf("USAGE: Rclient_UDP remote_IP-address remoteport allow_corrupted_bits(0 or 1) allow_packet_loss(0 or 1)\n");
 	   exit(1);
    }
-	
+
 	int iResult=0;
-	
+
 	sprintf(portNum,"%s", argv[2]);
 	iResult = getaddrinfo(argv[1], portNum, &hints, &result);
-   
+
    packets_damagedbit=atoi(argv[3]);
    packets_lostbit=atoi(argv[4]);
    if (packets_damagedbit < 0 || packets_damagedbit > 1 || packets_lostbit< 0 || packets_lostbit>1){
 	   printf("USAGE: Rclient_UDP remote_IP-address remoteport allow_corrupted_bits(0 or 1) allow_packet_loss(0 or 1)\n");
 	   exit(0);
    }
-   
+
 //*******************************************************************
-//CREATE CLIENT'S SOCKET 
+//CREATE CLIENT'S SOCKET
 //*******************************************************************
-   s = INVALID_SOCKET; 
+   s = INVALID_SOCKET;
    s = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
 
    if (s == INVALID_SOCKET) {
@@ -126,12 +126,12 @@ int main(int argc, char *argv[]) {
    }
     //nonblocking option
 	// Set the socket I/O mode: In this case FIONBIO
-	// enables or disables the blocking mode for the 
+	// enables or disables the blocking mode for the
 	// socket based on the numerical value of iMode.
-	// If iMode = 0, blocking is enabled; 
+	// If iMode = 0, blocking is enabled;
 	// If iMode != 0, non-blocking mode is enabled.
    u_long iMode=1;
-	
+
    iResult=ioctlsocket(s,FIONBIO,&iMode);
    if (iResult != NO_ERROR){
          printf("ioctlsocket failed with error: %d\n", iResult);
@@ -141,20 +141,20 @@ int main(int argc, char *argv[]) {
    }
 
    cout << "==============<< UDP CLIENT >>=============" << endl;
-   cout << "channel can damage packets=" << packets_damagedbit << endl;
-   cout << "channel can lose packets=" << packets_lostbit << endl;
-	
+   cout << "channel can damage packets = " << packets_damagedbit << endl;
+   cout << "channel can lose packets = " << packets_lostbit << endl;
+
 //*******************************************************************
-//SEND A TEXT FILE 
+//SEND A TEXT FILE
 //*******************************************************************
    int counter=0;
    char temp_buffer[BUFFER_SIZE];
    FILE *fin=fopen("data_for_transmission.txt","rb"); //original
-	
-//In text mode, carriage return–linefeed combinations 
-//are translated into single linefeeds on input, and 
-//linefeed characters are translated to carriage return–linefeed combinations on output. 
-	
+
+//In text mode, carriage returnï¿½linefeed combinations
+//are translated into single linefeeds on input, and
+//linefeed characters are translated to carriage returnï¿½linefeed combinations on output.
+
    if(fin==NULL){
 	   printf("cannot open data_for_transmission.txt\n");
 	   closesocket(s);
@@ -174,17 +174,18 @@ int main(int argc, char *argv[]) {
 			printf("\n======================================================\n");
 			cout << "calling send_unreliably, to deliver data of size " << strlen(send_buffer) << endl;
 			send_unreliably(s,send_buffer,(result->ai_addr)); //send the packet to the unreliable data channel
-			Sleep(1);  //sleep for 1 millisecond																			
+			Sleep(1);  //sleep for 1 millisecond
 //********************************************************************
 //RECEIVE
 //********************************************************************
 			addrlen = sizeof(remoteaddr); //IPv4 & IPv6-compliant
+			memset(receive_buffer,0,sizeof(receive_buffer));
 			bytes = recvfrom(s, receive_buffer, 78, 0,(struct sockaddr*)&remoteaddr,&addrlen);
 //********************************************************************
-//IDENTIFY server's IP address and port number.     
-//********************************************************************      
-	char serverHost[NI_MAXHOST]; 
-    char serverService[NI_MAXSERV];	
+//IDENTIFY server's IP address and port number.
+//********************************************************************
+	char serverHost[NI_MAXHOST];
+    char serverService[NI_MAXSERV];
     memset(serverHost, 0, sizeof(serverHost));
     memset(serverService, 0, sizeof(serverService));
 
@@ -196,17 +197,17 @@ int main(int argc, char *argv[]) {
 
 
 
-    printf("\nReceived a packet of size %d bytes from <<<UDP Server>>> with IP address:%s, at Port:%s\n",bytes,serverHost, serverService); 	   
-	
+    printf("\nReceived a packet of size %d bytes from <<<UDP Server>>> with IP address: %s, at Port: %s\n", bytes, serverHost, serverService);
+
 //********************************************************************
 //PROCESS REQUEST
 //********************************************************************
 			//Remove trailing CR and LN
-			if( bytes != SOCKET_ERROR ){	
+			if( bytes != SOCKET_ERROR ){
 				n=0;
 				while (n<bytes){
 					n++;
-					if ((bytes < 0) || (bytes == 0)) break;	
+					if ((bytes <= 0)) break;
 					if (receive_buffer[n] == '\n') { /*end on a LF*/
 						receive_buffer[n] = '\0';
 						break;
@@ -216,21 +217,21 @@ int main(int argc, char *argv[]) {
 				}
 				printf("RECEIVED --> %s, %d elements\n",receive_buffer, int(strlen(receive_buffer)));
 			}
-			
+
 		} else {
 			fclose(fin);
-			printf("End-of-File reached. \n"); 
-			memset(send_buffer, 0, sizeof(send_buffer)); 
+			printf("End-of-File reached. \n");
+			memset(send_buffer, 0, sizeof(send_buffer));
 			sprintf(send_buffer,"CLOSE \r\n"); //send a CLOSE command to the RECEIVER (Server)
 			printf("\n======================================================\n");
-			
+
 			send_unreliably(s,send_buffer,(result->ai_addr));
 			break;
 		}
-		
+
    } //while loop
 //*******************************************************************
-//CLOSESOCKET   
+//CLOSESOCKET
 //*******************************************************************
    closesocket(s);
    printf("Closing the socket connection and Exiting...\n");
@@ -242,4 +243,3 @@ int main(int argc, char *argv[]) {
 
    exit(0);
 }
-	
