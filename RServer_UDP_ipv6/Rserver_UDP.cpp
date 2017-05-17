@@ -162,7 +162,7 @@ void extractTokens(char *str, int &CRC, char *command, int &packetNumber, char *
 }
 
 int corruptCheck(char * receive_buffer, int *counter){
-	int CRC = -1;   // starts as false
+	int CRC = 0;   // starts as false
 	char command[256];
 	char data[256];
 	int packetNumber = -1;

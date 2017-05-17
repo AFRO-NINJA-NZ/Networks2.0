@@ -90,12 +90,19 @@ public:
 	void InsertLine(string data);
 	bool AckedStatus(int position);
 	clock_t TimerValue (int position);
+	void Print() {
+		for (int i = 0; i<count; ++i) {
+			cout<<i<<") "<<allData[i]->data<<endl;
+		}
+	}
 };
 
 void Client_vector::InsertLine(string data) {
+	allData[count] = new Data();
 	allData[count]->data = data;
 	allData[count]->acked = false;
 	allData[count]->timer = clock();
+	count++;
 }
 
 bool Client_vector::AckedStatus(int position) {
@@ -132,6 +139,7 @@ int main(int argc, char *argv[]) {
    char send_buffer[BUFFER_SIZE],receive_buffer[BUFFER_SIZE];
    int n,bytes,addrlen;
 
+	 Client_vector *data_vector = new Client_vector();
 
 	addrlen=sizeof(struct sockaddr);
 
@@ -222,6 +230,9 @@ int main(int argc, char *argv[]) {
 		memset(send_buffer, 0, sizeof(send_buffer));//clean up the send_buffer before reading the next line
 		if (!feof(fin)) {
 			fgets(send_buffer,SEGMENT_SIZE,fin); //get one line of data from the file
+
+			data_vector->InsertLine(send_buffer);		//Adding data to vector
+
 			sprintf(temp_buffer,"PACKET %d ",counter);  //create packet header with Sequence number
 			send_CRC = CRC(send_buffer);   // Making CRC
 			counter++;
@@ -291,6 +302,9 @@ int main(int argc, char *argv[]) {
 		}
 
    } //while loop
+	 cout<<"\nooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo\n"<<endl;
+	 data_vector->Print();
+	 cout<<"\nooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo\n"<<endl;
 //*******************************************************************
 //CLOSESOCKET
 //*******************************************************************
