@@ -88,8 +88,16 @@ public:
 	};
 	~Client_vector() {};
 	void InsertLine(string data);
-	bool AckedStatus(int position);
-	clock_t TimerValue (int position);
+	bool AckedStatus(int position) {
+		//if (position < count) {
+			return allData[position]->acked;
+		//}
+	}
+	clock_t TimerValue (int position) {
+		//if (position < count) {
+			return allData[position]->timer;
+		// }
+	};
 	void Print() {
 		for (int i = 0; i<count; ++i) {
 			cout<<i<<") "<<allData[i]->data<<endl;
@@ -103,18 +111,6 @@ void Client_vector::InsertLine(string data) {
 	allData[count]->acked = false;
 	allData[count]->timer = clock();
 	count++;
-}
-
-bool Client_vector::AckedStatus(int position) {
-	//if (position < count) {
-		return allData[position]->acked;
-	//}
-}
-
-clock_t Client_vector::TimerValue (int position) {
-	//if (position < count) {
-		return allData[position]->timer;
-	// }
 }
 
 

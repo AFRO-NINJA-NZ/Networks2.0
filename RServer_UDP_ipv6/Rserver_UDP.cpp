@@ -64,6 +64,53 @@ int packets_lostbit=0;
 #define NUMBER_OF_WORDS_IN_THE_HEADER 2
 #define GENERATOR 0x8005 //0x8005, generator for polynomial division
 
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+// Storing data in a custom vector
+
+struct Data {
+	string data;
+	bool acked;
+	clock_t timer;
+};
+
+class Server_vector {
+private:
+	Data *allData[200000];
+	int count;
+public:
+	Server_vector() {
+		count = 0;
+		for (int i = 0; i<200000; ++i) {
+			allData[i] = NULL;
+		}
+	};
+	~Server_vector() {};
+	void InsertLine(string data);
+	bool AckedStatus(int position) {
+		//if (position < count) {
+			return allData[position]->acked;
+		//}
+	}
+	clock_t TimerValue (int position) {
+		//if (position < count) {
+			return allData[position]->timer;
+		// }
+	};
+	void Print() {
+		for (int i = 0; i<count; ++i) {
+			cout<<i<<") "<<allData[i]->data<<endl;
+		}
+	}
+};
+
+void Server_vector::InsertLine(string data) {
+	allData[count] = new Data();
+	allData[count]->data = data;
+	allData[count]->acked = false;
+	allData[count]->timer = clock();
+	count++;
+}
+//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 unsigned int CRCpolynomial(char *buffer){
 	unsigned char i;
@@ -330,7 +377,7 @@ int main(int argc, char *argv[]) {
 //********************************************************************
 //IDENTIFY UDP client's IP address and port number.
 //********************************************************************
-	char clientHost[NI_MAXHOST];
+		char clientHost[NI_MAXHOST];
     char clientService[NI_MAXSERV];
     memset(clientHost, 0, sizeof(clientHost));
     memset(clientService, 0, sizeof(clientService));
@@ -341,7 +388,15 @@ int main(int argc, char *argv[]) {
                   clientService, sizeof(clientService),
                   NI_NUMERICHOST);
 
-	crc = corruptCheck(receive_buffer, &counter);
+		//TODO: ASK ABOUT BELOW LINE
+		//TODO:
+		//TODO:
+		//TODO:
+		//TODO:
+		//TODO:
+		//TODO:
+		//TODO:
+		//crc = corruptCheck(receive_buffer, &counter);
 
 //********************************************************************
 //RECEIVE
@@ -416,6 +471,7 @@ int main(int argc, char *argv[]) {
 				   //Or, send a negative ACK? It is up to you to decide here.
 			}
 		}
+
    }
    closesocket(s);
 
