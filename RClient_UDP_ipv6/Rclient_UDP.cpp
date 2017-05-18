@@ -230,9 +230,11 @@ int main(int argc, char *argv[]) {
 			data_vector->InsertLine(send_buffer);		//Adding data to vector
 
 			sprintf(temp_buffer,"PACKET %d ",counter);  //create packet header with Sequence number
+			send_buffer[strlen(send_buffer) - 2] = '\0';
 			send_CRC = CRC(send_buffer);   // Making CRC
+			cout << "CRC is performed on \"" << send_buffer << "\"" << endl;
 			counter++;
-			sprintf(SCRC, "CRC %d ", send_CRC);   // adding CRC
+			sprintf(SCRC, "%d ", send_CRC);   // adding CRC
 			strcat(temp_buffer, send_buffer);   //append data to packet header
 			strcat(SCRC, temp_buffer);
 			strcpy(send_buffer, SCRC);   //the complete packet

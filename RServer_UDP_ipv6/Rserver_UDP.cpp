@@ -171,21 +171,24 @@ void save_line_without_header(char * receive_buffer,FILE *fout){
 	}
 }
 
-void extractTokens(char *str, int &CRC, char *command, int &packetNumber, char *data){
+void extractTokens(char *str, unsigned int &CRC, char *command, int &packetNumber, char *data){
 	char * pch;
-
   int tokenCounter=0;
-  printf ("Splitting string \"%s\" into tokens:\n\n",str);
-
+  //printf ("Splitting string \"%s\" into tokens:\n\n",str);
   while (1)
   {
 	 if(tokenCounter ==0){
        pch = strtok (str, " ,.-'\r\n'");
     } else {
-		 pch = strtok (NULL, " ,.-'\r\n'");
-	 }
+		 	 pch = strtok (NULL, " ,.-'\r\n'");
+	 }else if (tokenCounter > 3) {
+ 		strcat(data, " ");
+ 		strcat(data, pch);
+ 	}
+	
 	 if(pch == NULL) break;
-	 printf ("Token[%d], with %d characters = %s\n",tokenCounter,int(strlen(pch)),pch);
+	// printf ("Token[%d], with %d characters = %s\n",tokenCounter,int(strlen(pch)),pch);
+
 
     switch(tokenCounter){
       case 0: CRC = atoi(pch);
@@ -206,42 +209,6 @@ void extractTokens(char *str, int &CRC, char *command, int &packetNumber, char *
 
 	 tokenCounter++;
   }
-}
-
-int corruptCheck(char * receive_buffer, int *counter){
-	int CRC = 0;   // starts as false
-	char command[256];
-	char data[256];
-	int packetNumber = -1;
-
-	memset(data,0,sizeof(data));
-	memset(command,0,sizeof(command));
-
-	extractTokens(receive_buffer, CRC, command, packetNumber, data);
-	return CRC;
-	// char *token;
-  //   if(strncmp(receive_buffer,"CRC",3)==0){
-  //       sscanf(receive_buffer, "CRC %d",&crc);
-  //       token = strtok(receive_buffer, " ");// token is 'CRC'
-  //       token = strtok(NULL, " ");         // token is '#####'
-	// 		crc = atoi(token);
-  //       token = strtok(NULL, "\0");         // token is remainder of string
-  //       strcpy(receive_buffer, token);      // receive_buffer is remainder of string
-  //       if(crc != CRCpolynomial(receive_buffer)){
-  //           return 1;                       // damaged packet
-  //       } else {
-  //           if(strncmp(receive_buffer,"PACKET",6)==0){
-  //               sscanf(receive_buffer, "PACKET %d",&sequenceNum);
-  //               token = strtok(receive_buffer, " ");// token is 'PACKET'
-  //               token = strtok(NULL, " ");          // token is '#'
-  //               sequenceNum = atoi(token);
-  //               *counter = sequenceNum;                   // change value of counter to the seqNum
-  //               token = strtok(NULL, "\0");         // token is remainder of string
-  //               strcpy(receive_buffer, token);      // receive_buffer is remainder of string
-  //               return 0;                       // no damage detected
-  //           }
-  //       }
-  //   }
 }
 
 
@@ -287,6 +254,7 @@ int main(int argc, char *argv[]) {
 
 
     randominit();
+		Server_vector *data_vector = new Server_vector();
 //********************************************************************
 // WSSTARTUP
 //********************************************************************
@@ -367,7 +335,6 @@ int main(int argc, char *argv[]) {
 
 //********************************************************************
 
-	int crc = 0;
 	int expectedAck = 0;
 
 //INFINITE LOOP
@@ -387,16 +354,6 @@ int main(int argc, char *argv[]) {
                   clientHost, sizeof(clientHost),
                   clientService, sizeof(clientService),
                   NI_NUMERICHOST);
-
-		//TODO: ASK ABOUT BELOW LINE
-		//TODO:
-		//TODO:
-		//TODO:
-		//TODO:
-		//TODO:
-		//TODO:
-		//TODO:
-		//crc = corruptCheck(receive_buffer, &counter);
 
 //********************************************************************
 //RECEIVE
@@ -432,17 +389,30 @@ int main(int argc, char *argv[]) {
 		printf("\n================================================\n");
 		printf("RECEIVED --> %s \n",receive_buffer);
 
+		data_vector->InsertLine(receive_buffer);
+
 		//if (strncmp(receive_buffer,"PACKET",6)==0)  {
 		//	sscanf(receive_buffer, "PACKET %d",&counter);
 //********************************************************************
 //SEND ACK
 //********************************************************************
 
-		crc = corruptCheck(receive_buffer, &counter);
+		unsigned int CRC = 0;   // starts as false
+		char command[256];
+		char data[256];
+		int packetNumber = -1;
+		unsigned int calculated_CRC = 0;
 
-		if(crc == 1)printf("**Packet corupted**\n");
+		memset(data,0,sizeof(data));
+		memset(command,0,sizeof(command));
 
-		if(crc == 0){
+		extractTokens(receive_buffer, CRC, command, packetNumber, data);
+		calculated_CRC = CRCpolynomial(data);
+		cout << "\nCRC value is: " << CRC << " vs " << calculated_CRC << " from \"" << data  << "\""<< endl;
+
+		if(CRC != calculated_CRC) { printf("**Packet corupted**\n"); }
+
+		else if (CRC == calculated_CRC) {
 			sprintf(send_buffer,"ACK %d \r\n",counter);
 
 			//send ACK ureliably
@@ -456,8 +426,7 @@ int main(int argc, char *argv[]) {
                     save_line_without_header(receive_buffer,fout);
                     expectedAck++;
                 }
-		}
-		else {
+		} else {
 			if (strncmp(receive_buffer,"CLOSE",5)==0)  {//if client says "CLOSE", the last packet for the file was sent. Close the file
 				//Remember that the packet carrying "CLOSE" may be lost or damaged as well!
 				fclose(fout);
@@ -474,13 +443,13 @@ int main(int argc, char *argv[]) {
 
    }
    closesocket(s);
-
+	 cout<<"OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO"<<endl;
+	 data_vector->Print();
+	 cout<<"OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO\n\n"<<endl;
    cout << "==============<< STATISTICS >>=============" << endl;
    cout << "numOfPacketsDamaged=" << numOfPacketsDamaged << endl;
    cout << "numOfPacketsLost=" << numOfPacketsLost << endl;
    cout << "numOfPacketsUncorrupted=" << numOfPacketsUncorrupted << endl;
    cout << "===========================================" << endl;
-	cout << "crc num: " << crc << endl;
-	cout << "Check Before " << corruptCheck(receive_buffer, &counter) << endl;
    exit(0);
 }
