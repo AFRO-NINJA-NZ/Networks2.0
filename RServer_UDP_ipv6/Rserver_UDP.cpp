@@ -181,15 +181,14 @@ void extractTokens(char *str, unsigned int &CRC, char *command, int &packetNumbe
        pch = strtok (str, " ,.-'\r\n'");
     } else {
 		 	 pch = strtok (NULL, " ,.-'\r\n'");
-	 }else if (tokenCounter > 3) {
- 		strcat(data, " ");
- 		strcat(data, pch);
- 	}
-	
+	 }
 	 if(pch == NULL) break;
 	// printf ("Token[%d], with %d characters = %s\n",tokenCounter,int(strlen(pch)),pch);
 
-
+	if (tokenCounter > 3) {
+		strcat(data, " ");
+		strcat(data, pch);
+	}
     switch(tokenCounter){
       case 0: CRC = atoi(pch);
 			     break;
