@@ -14,15 +14,15 @@
 	#include <unistd.h>
 	#include <errno.h>
 	#include <stdlib.h>
-	#include <stdio.h> 
+	#include <stdio.h>
 	#include <string.h>
-	#include <sys/types.h> 
-	#include <sys/socket.h> 
+	#include <sys/types.h>
+	#include <sys/socket.h>
 	#include <arpa/inet.h>
-	#include <netinet/in.h> 
+	#include <netinet/in.h>
 	#include <netdb.h>
 
-#elif defined _WIN32 
+#elif defined _WIN32
 
 	//Ws2_32.lib
 	#define _WIN32_WINNT 0x501  //to recognise getaddrinfo()
@@ -42,14 +42,14 @@
 #endif
 
 //********************************************
-// fate=0 (ok)  or 
-//     =1 (damaged) or 
+// fate=0 (ok)  or
+//     =1 (damaged) or
 //     =2 (lost)
 //********************************************
-//---                 
-int damaged_not_lost_cases[10] = {1,0,1,0,0,1,1,0,0,0};                   
-int lost_not_damaged_cases[10] = {0,2,0,0,0,0,2,2,0,2};                   
-int damaged_and_lost_cases[10] = {1,0,2,0,0,0,2,1,1,0};                     
+//---
+int damaged_not_lost_cases[10] = {1,0,1,0,0,1,1,0,0,0};
+int lost_not_damaged_cases[10] = {0,2,0,0,0,0,2,2,0,2};
+int damaged_and_lost_cases[10] = {1,0,2,0,0,0,2,1,1,0};
 //---
 
 extern int numOfPacketsDamaged;
@@ -75,15 +75,15 @@ float randomVal(float min, float max)
 
 int packets_fate(void){
 	static int counter=0;
-	int tmp;	
-		
+	int tmp;
+
 	if (packets_damagedbit==0 && packets_lostbit==0) return 0;
 	if (packets_damagedbit==1 && packets_lostbit==0) {
 		tmp = counter;
 		counter++;
 		counter = counter % 10;
 		return damaged_not_lost_cases[tmp];
-		
+
 	}
 	if (packets_damagedbit==0 && packets_lostbit==1) {
 		tmp = counter;
@@ -99,7 +99,7 @@ int packets_fate(void){
 	} else {
 		printf("Error: unknown case in packets_fate().\n");
 		exit(1);
-	}		
+	}
 }
 
 int damage_bit(void){
@@ -114,17 +114,17 @@ int random_char(void){
 
 int send_unreliably(int s,const char *send_buffer, struct sockaddr* remoteaddress) {
 	    char tmp_send_buffer[256];
-	
+
 	    //if(send_buffer == NULL) return 0;
 	    strcpy(tmp_send_buffer,send_buffer);
-	   
+
 	    int bytes=0;
    	    int fate=packets_fate(); //determine the packet's fate
-	    
+
 		if (fate==0){//fate=0 (ok)  or 1 (damaged) or 2 (lost)
-            numOfPacketsUncorrupted++; 
-			bytes = sendto(s, tmp_send_buffer, strlen(tmp_send_buffer),0,(struct sockaddr *)(remoteaddress),sizeof(sockaddr_storage) );	
-			printf("<-- SEND: %s,%d elements\n",tmp_send_buffer,int(strlen(tmp_send_buffer)));
+            numOfPacketsUncorrupted++;
+			bytes = sendto(s, tmp_send_buffer, strlen(tmp_send_buffer),0,(struct sockaddr *)(remoteaddress),sizeof(sockaddr_storage) );
+			printf("<-- SEND: \"%s\", %d elements\n",tmp_send_buffer,int(strlen(tmp_send_buffer)));
 			if (bytes < 0) {
 				printf("send failed\n");
 				exit(1);
@@ -134,9 +134,9 @@ int send_unreliably(int s,const char *send_buffer, struct sockaddr* remoteaddres
 				printf("TRIED %s, size = %d\n",tmp_send_buffer, int(strlen(tmp_send_buffer)));
 				tmp_send_buffer[damage_bit()]=random_char();
 				tmp_send_buffer[damage_bit()]=random_char();
-				
+
 			    bytes = sendto(s, tmp_send_buffer, strlen(tmp_send_buffer),0,(struct sockaddr *)(remoteaddress),sizeof(sockaddr_storage) );
-			   
+
 				printf("<-- DAMAGED %s \n",tmp_send_buffer);
 				if (bytes < 0) {
 		  	       printf("send failed\n");
@@ -150,7 +150,7 @@ int send_unreliably(int s,const char *send_buffer, struct sockaddr* remoteaddres
 				printf("Error in send_unreliably: unknown packet fate.\n");
 				exit(1);
 		}
-		
+
 		return bytes;
 }
 

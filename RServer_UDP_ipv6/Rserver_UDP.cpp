@@ -211,18 +211,30 @@ void extractTokens(char *str, unsigned int &CRC, char *command, int &packetNumbe
 }
 
 
-void addAckHeader(char *send_buffer, int counter){
+void addAckHeader(char *send_buffer, int counter, bool ack){
     char temp_buffer[80];
     int crc = 0;
-    sprintf(temp_buffer,"ACKNOW %d",counter); // temp_buffer now = ACKNOW #
-    strcat(temp_buffer,send_buffer);
-    strcpy(send_buffer,temp_buffer);
-    // get crc of send_buffer
-    crc = CRCpolynomial(send_buffer);
-    //add a header to the packet with the crc number
-    sprintf(temp_buffer,"CRC %d ",crc);
-    strcat(temp_buffer,send_buffer);
-    strcpy(send_buffer,temp_buffer);
+		if (ack) {
+    	sprintf(temp_buffer,"ACK %d",counter); // temp_buffer now = ACK #
+    	strcat(temp_buffer,send_buffer);
+    	strcpy(send_buffer,temp_buffer);
+    	// get crc of send_buffer
+    	crc = CRCpolynomial(send_buffer);
+    	//add a header to the packet with the crc number
+    	sprintf(temp_buffer,"%d ",crc);
+    	strcat(temp_buffer,send_buffer);
+    	strcpy(send_buffer,temp_buffer);
+		} else {
+    	sprintf(temp_buffer,"NACK %d",counter); // temp_buffer now = NACK #
+    	strcat(temp_buffer,send_buffer);
+    	strcpy(send_buffer,temp_buffer);
+    	// get crc of send_buffer
+    	crc = CRCpolynomial(send_buffer);
+    	//add a header to the packet with the crc number
+    	sprintf(temp_buffer,"%d ",crc);
+    	strcat(temp_buffer,send_buffer);
+    	strcpy(send_buffer,temp_buffer);
+		}
 }
 
 #define WSVERS MAKEWORD(2,0)
@@ -303,7 +315,6 @@ int main(int argc, char *argv[]) {
 	   exit(0);
    }
 
-   int counter=0;
 //********************************************************************
 //BIND
 //********************************************************************
@@ -388,8 +399,6 @@ int main(int argc, char *argv[]) {
 		printf("\n================================================\n");
 		printf("RECEIVED --> %s \n",receive_buffer);
 
-		data_vector->InsertLine(receive_buffer);
-
 		//if (strncmp(receive_buffer,"PACKET",6)==0)  {
 		//	sscanf(receive_buffer, "PACKET %d",&counter);
 //********************************************************************
@@ -400,31 +409,43 @@ int main(int argc, char *argv[]) {
 		char command[256];
 		char data[256];
 		int packetNumber = -1;
-		unsigned int calculated_CRC = 0;
+		unsigned int calculated_CRC = 1;
 
 		memset(data,0,sizeof(data));
 		memset(command,0,sizeof(command));
+		memset(send_buffer,0,sizeof(send_buffer));
 
 		extractTokens(receive_buffer, CRC, command, packetNumber, data);
 		calculated_CRC = CRCpolynomial(data);
 		cout << "\nCRC value is: " << CRC << " vs " << calculated_CRC << " from \"" << data  << "\""<< endl;
 
-		if(CRC != calculated_CRC) { printf("**Packet corupted**\n"); }
+		if(CRC != calculated_CRC) {
+			printf("**Packet corupted**\n");
+			addAckHeader(send_buffer, packetNumber, false);
+		}	else if (CRC == calculated_CRC) {
+			if (strncmp(receive_buffer,"PACKET",6) == 0) {
+				//send ACK ureliably
+				addAckHeader(send_buffer, packetNumber, true);
+				send_unreliably(s,send_buffer,(sockaddr*)&clientAddress);
+				cout << "expectedAck is: " << expectedAck << " packetNumber is: " << packetNumber << endl;
+				cout << "receive_buffer is: \"" << receive_buffer << "\"" << endl;
 
-		else if (CRC == calculated_CRC) {
-			sprintf(send_buffer,"ACK %d \r\n",counter);
-
-			//send ACK ureliably
-			addAckHeader(send_buffer, counter);
-
-			send_unreliably(s,send_buffer,(sockaddr*)&clientAddress );
-
-			//store the packet's data into a file
-			save_line_without_header(receive_buffer,fout);
-			if(expectedAck == counter){
-                    save_line_without_header(receive_buffer,fout);
-                    expectedAck++;
-                }
+				// store the packet's data into a file
+				data_vector->InsertLine(data);
+	 	 		cout<<"OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO\n\n"<<endl;
+	 	 		data_vector->Print();
+	 	 		cout<<"OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO\n\n"<<endl;
+				// Instead save into vector
+				// save_line_without_header(receive_buffer,fout);
+				if(expectedAck == packetNumber){
+					fprintf(fout, "%s\n", data);
+	        	// save_line_without_header(receive_buffer,fout);
+	          expectedAck++;
+	      }
+			} else {
+			 	addAckHeader(send_buffer, packetNumber, false);
+			 	send_unreliably(s,send_buffer,(sockaddr*)&clientAddress);
+			}
 		} else {
 			if (strncmp(receive_buffer,"CLOSE",5)==0)  {//if client says "CLOSE", the last packet for the file was sent. Close the file
 				//Remember that the packet carrying "CLOSE" may be lost or damaged as well!
@@ -433,18 +454,18 @@ int main(int argc, char *argv[]) {
 				printf("Server saved data_received.txt \n");//you have to manually check to see if this file is identical to file1_Windows.txt
 				printf("Closing the socket connection and Exiting...\n");
 				break;
-			}
-			else {//it is not a PACKET nor a CLOSE; therefore, it might be a damaged packet
-				   //Are you going to do nothing, ignoring the damaged packet?
-				   //Or, send a negative ACK? It is up to you to decide here.
-			}
-		}
+			} else {//it is not a PACKET nor a CLOSE; therefore, it might be a damaged packet
+			   //Are you going to do nothing, ignoring the damaged packet?
+			   //Or, send a negative ACK? It is up to you to decide here.
+		 			addAckHeader(send_buffer, packetNumber, false);
+					send_unreliably(s,send_buffer,(sockaddr*)&clientAddress);
+					break;
+			 }
+		 }
+	}
 
    }
    closesocket(s);
-	 cout<<"OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO"<<endl;
-	 data_vector->Print();
-	 cout<<"OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO\n\n"<<endl;
    cout << "==============<< STATISTICS >>=============" << endl;
    cout << "numOfPacketsDamaged=" << numOfPacketsDamaged << endl;
    cout << "numOfPacketsLost=" << numOfPacketsLost << endl;

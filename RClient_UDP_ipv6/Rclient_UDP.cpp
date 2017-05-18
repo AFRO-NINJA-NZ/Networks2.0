@@ -64,7 +64,8 @@ int packets_lostbit=0;
 unsigned int send_CRC;
 unsigned int recv_CRC;
 
-unsigned int CRC(char *buffer);
+unsigned int CRCpolynomial(char *buffer);
+void extractTokens(char *str, unsigned int &CRC, char *command, int &packetNumber, char *data);
 
 
 // Storing data in a custom vector
@@ -112,11 +113,6 @@ void Client_vector::InsertLine(string data) {
 	allData[count]->timer = clock();
 	count++;
 }
-
-
-
-
-
 
 /////////////////////////////////////////////////////////////////////////////////////////
 int main(int argc, char *argv[]) {
@@ -231,7 +227,7 @@ int main(int argc, char *argv[]) {
 
 			sprintf(temp_buffer,"PACKET %d ",counter);  //create packet header with Sequence number
 			send_buffer[strlen(send_buffer) - 2] = '\0';
-			send_CRC = CRC(send_buffer);   // Making CRC
+			send_CRC = CRCpolynomial(send_buffer);   // Making CRC
 			cout << "CRC is performed on \"" << send_buffer << "\"" << endl;
 			counter++;
 			sprintf(SCRC, "%d ", send_CRC);   // adding CRC
@@ -247,10 +243,25 @@ int main(int argc, char *argv[]) {
 //********************************************************************
 //RECEIVE
 //********************************************************************
+			unsigned int CRC = 0;   // starts as false
+			char command[256];
+			char data[256];
+			int packetNumber = -1;
+			unsigned int calculated_CRC = 0;
 			addrlen = sizeof(remoteaddr); //IPv4 & IPv6-compliant
 			memset(receive_buffer,0,sizeof(receive_buffer));
 			bytes = recvfrom(s, receive_buffer, 78, 0,(struct sockaddr*)&remoteaddr,&addrlen);
-
+			cout << "Received YAYAYA" << endl;
+			extractTokens(receive_buffer, CRC, command, packetNumber, data);
+			calculated_CRC = CRCpolynomial(data);
+			if (strncmp(receive_buffer,"ACK",3)==0) {
+				if (calculated_CRC = CRC) {
+					// Vector at position packetNumber changed to ACK
+				}
+				// If CRC doesnt match then timer takes care of corrupted ACK
+			} else if (strncmp(receive_buffer,"NACK",4)==0) {
+				// Resend data at vector position packetNumber
+			}
 //********************************************************************
 //IDENTIFY server's IP address and port number.
 //********************************************************************
@@ -317,7 +328,7 @@ int main(int argc, char *argv[]) {
    exit(0);
 }
 
-unsigned int CRC(char *buffer){
+unsigned int CRCpolynomial(char *buffer){
 	unsigned char i;
 	unsigned int rem=0x0000;
     unsigned int bufsize=strlen(buffer);
@@ -338,4 +349,43 @@ unsigned int CRC(char *buffer){
 	}
 	rem=rem&0xffff;
 	return rem;
+}
+
+void extractTokens(char *str, unsigned int &CRC, char *command, int &packetNumber, char *data){
+	char * pch;
+  int tokenCounter=0;
+  printf ("Splitting string \"%s\" into tokens:\n\n",str);
+  while (1)
+  {
+	 if(tokenCounter ==0){
+       pch = strtok (str, " ,.-'\r\n'");
+    } else {
+		 	 pch = strtok (NULL, " ,.-'\r\n'");
+	 }
+	 if(pch == NULL) break;
+	 printf ("Token[%d], with %d characters = %s\n",tokenCounter,int(strlen(pch)),pch);
+
+	if (tokenCounter > 3) {
+		strcat(data, " ");
+		strcat(data, pch);
+	}
+    switch(tokenCounter){
+      case 0: CRC = atoi(pch);
+			     break;
+      case 1: //command = new char[strlen(pch)];
+			     strcpy(command, pch);
+
+		        printf("command = %s, %d characters\n", command, int(strlen(command)));
+              break;
+		  case 2: packetNumber = atoi(pch);
+		        break;
+		  case 3: //data = new char[strlen(pch)];
+			     strcpy(data, pch);
+
+		        printf("data = %s, %d characters\n", data, int(strlen(data)));
+              break;
+    }
+
+	 tokenCounter++;
+  }
 }
