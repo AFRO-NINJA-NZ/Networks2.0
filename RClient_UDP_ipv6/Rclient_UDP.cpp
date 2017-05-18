@@ -104,6 +104,9 @@ public:
 			cout<<i<<") "<<allData[i]->data<<endl;
 		}
 	}
+	string GetData(int position) {
+		return allData[position]->data;
+	}
 };
 
 void Client_vector::InsertLine(string data) {
@@ -255,12 +258,25 @@ int main(int argc, char *argv[]) {
 			extractTokens(receive_buffer, CRC, command, packetNumber, data);
 			calculated_CRC = CRCpolynomial(data);
 			if (strncmp(receive_buffer,"ACK",3)==0) {
-				if (calculated_CRC = CRC) {
+				if (calculated_CRC == CRC) {
 					// Vector at position packetNumber changed to ACK
 				}
 				// If CRC doesnt match then timer takes care of corrupted ACK
 			} else if (strncmp(receive_buffer,"NACK",4)==0) {
+				memset(send_buffer,0,sizeof(send_buffer));
+				memset(temp_buffer,0,sizeof(temp_buffer));
+				memset(SCRC,0,sizeof(SCRC));
 				// Resend data at vector position packetNumber
+				string temp = data_vector->GetData(packetNumber);
+				memcpy(send_buffer,temp.c_str(),temp.length());
+				//sprintf(send_buffer, "%s ", data_vector->GetData(packetNumber));
+				sprintf(temp_buffer,"PACKET %d ",packetNumber);  //create packet header with Sequence number
+				send_CRC = CRCpolynomial(send_buffer);   // Making CRC
+				sprintf(SCRC, "%d ", send_CRC);   // adding CRC
+				strcat(temp_buffer, send_buffer);   //append data to packet header
+				strcat(SCRC, temp_buffer);   // append packet|data to CRC
+				strcpy(send_buffer, SCRC);   //the complete packet
+				send_unreliably(s,send_buffer,(result->ai_addr));
 			}
 //********************************************************************
 //IDENTIFY server's IP address and port number.

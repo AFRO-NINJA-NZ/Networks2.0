@@ -422,8 +422,9 @@ int main(int argc, char *argv[]) {
 		if(CRC != calculated_CRC) {
 			printf("**Packet corupted**\n");
 			addAckHeader(send_buffer, packetNumber, false);
+			send_unreliably(s,send_buffer,(sockaddr*)&clientAddress);
 		}	else if (CRC == calculated_CRC) {
-			if (strncmp(receive_buffer,"PACKET",6) == 0) {
+			if (strncmp(command,"PACKET",6) == 0) {
 				//send ACK ureliably
 				addAckHeader(send_buffer, packetNumber, true);
 				send_unreliably(s,send_buffer,(sockaddr*)&clientAddress);
@@ -464,7 +465,6 @@ int main(int argc, char *argv[]) {
 		 }
 	}
 
-   }
    closesocket(s);
    cout << "==============<< STATISTICS >>=============" << endl;
    cout << "numOfPacketsDamaged=" << numOfPacketsDamaged << endl;
