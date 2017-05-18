@@ -69,8 +69,7 @@ int packets_lostbit=0;
 
 struct Data {
 	string data;
-	bool acked;
-	clock_t timer;
+	//bool acked;
 };
 
 class Server_vector {
@@ -85,29 +84,23 @@ public:
 		}
 	};
 	~Server_vector() {};
-	void InsertLine(string data);
-	bool AckedStatus(int position) {
-		//if (position < count) {
-			return allData[position]->acked;
-		//}
-	}
-	clock_t TimerValue (int position) {
-		//if (position < count) {
-			return allData[position]->timer;
-		// }
-	};
+	void InsertLine(string data, int position);
+
 	void Print() {
 		for (int i = 0; i<count; ++i) {
-			cout<<i<<") "<<allData[i]->data<<endl;
+			 if (allData[i] == NULL) {
+				 cout<<"NONE"<<endl;
+			 }else {
+				 cout<<i<<") "<<allData[i]->data<<endl;
+			 }
 		}
 	}
 };
 
-void Server_vector::InsertLine(string data) {
-	allData[count] = new Data();
-	allData[count]->data = data;
-	allData[count]->acked = false;
-	allData[count]->timer = clock();
+void Server_vector::InsertLine(string data, int position) {
+	allData[position] = new Data();
+	allData[position]->data = data;
+	//allData[position]->acked = false;
 	count++;
 }
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -432,7 +425,7 @@ int main(int argc, char *argv[]) {
 				cout << "receive_buffer is: \"" << receive_buffer << "\"" << endl;
 
 				// store the packet's data into a file
-				data_vector->InsertLine(data);
+				data_vector->InsertLine(data, packetNumber);
 	 	 		cout<<"OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO\n\n"<<endl;
 	 	 		data_vector->Print();
 	 	 		cout<<"OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO\n\n"<<endl;

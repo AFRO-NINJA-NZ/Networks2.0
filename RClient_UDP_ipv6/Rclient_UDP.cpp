@@ -88,7 +88,7 @@ public:
 		}
 	};
 	~Client_vector() {};
-	void InsertLine(string data);
+	void InsertLine(string data, int position);
 	bool AckedStatus(int position) {
 		//if (position < count) {
 			return allData[position]->acked;
@@ -101,19 +101,34 @@ public:
 	};
 	void Print() {
 		for (int i = 0; i<count; ++i) {
-			cout<<i<<") "<<allData[i]->data<<endl;
+			 if (allData[i] == NULL) {
+				 cout<<"NONE"<<endl;
+			 }else {
+				 cout<<i<<") "<<allData[i]->data<<endl;
+			 }
 		}
 	}
 	string GetData(int position) {
 		return allData[position]->data;
 	}
+
+
+	void ResetTimer (int position) {
+		allData[position]->timer = clock();
+	}
+	void UpdateACK (int position) {
+		allData[position]->acked = true;
+	}
+
+	int GetCount() {return count;}
+
 };
 
-void Client_vector::InsertLine(string data) {
-	allData[count] = new Data();
-	allData[count]->data = data;
-	allData[count]->acked = false;
-	allData[count]->timer = clock();
+void Client_vector::InsertLine(string data, int position) {
+	allData[position] = new Data();
+	allData[position]->data = data;
+	allData[position]->acked = false;
+	allData[position]->timer = clock();
 	count++;
 }
 
@@ -226,7 +241,7 @@ int main(int argc, char *argv[]) {
 		if (!feof(fin)) {
 			fgets(send_buffer,SEGMENT_SIZE,fin); //get one line of data from the file
 
-			data_vector->InsertLine(send_buffer);		//Adding data to vector
+			data_vector->InsertLine(send_buffer, counter);		//Adding data to vector
 
 			sprintf(temp_buffer,"PACKET %d ",counter);  //create packet header with Sequence number
 			send_buffer[strlen(send_buffer) - 2] = '\0';
@@ -254,12 +269,13 @@ int main(int argc, char *argv[]) {
 			addrlen = sizeof(remoteaddr); //IPv4 & IPv6-compliant
 			memset(receive_buffer,0,sizeof(receive_buffer));
 			bytes = recvfrom(s, receive_buffer, 78, 0,(struct sockaddr*)&remoteaddr,&addrlen);
-			cout << "Received YAYAYA" << endl;
+			//cout << "Received YAYAYA" << endl;
 			extractTokens(receive_buffer, CRC, command, packetNumber, data);
 			calculated_CRC = CRCpolynomial(data);
 			if (strncmp(receive_buffer,"ACK",3)==0) {
 				if (calculated_CRC == CRC) {
 					// Vector at position packetNumber changed to ACK
+					data_vector->UpdateACK(packetNumber);
 				}
 				// If CRC doesnt match then timer takes care of corrupted ACK
 			} else if (strncmp(receive_buffer,"NACK",4)==0) {
@@ -277,7 +293,36 @@ int main(int argc, char *argv[]) {
 				strcat(SCRC, temp_buffer);   // append packet|data to CRC
 				strcpy(send_buffer, SCRC);   //the complete packet
 				send_unreliably(s,send_buffer,(result->ai_addr));
+
+				data_vector->ResetTimer(packetNumber);
 			}
+
+			int count = data_vector->GetCount();
+			cout<<"\n\nCHECKING EXPIRED TIMER\n\n"<<endl;
+			for (int i = 0; i<count; ++i) {
+				if (!data_vector->AckedStatus(i)) {
+					if ((clock() - data_vector->TimerValue(i)) > 10) {
+
+						memset(send_buffer,0,sizeof(send_buffer));
+						memset(temp_buffer,0,sizeof(temp_buffer));
+						memset(SCRC,0,sizeof(SCRC));
+						// Resend data at vector position packetNumber
+						string temp = data_vector->GetData(i);
+						memcpy(send_buffer,temp.c_str(),temp.length());
+						//sprintf(send_buffer, "%s ", data_vector->GetData(packetNumber));
+						sprintf(temp_buffer,"PACKET %d ",packetNumber);  //create packet header with Sequence number
+						send_CRC = CRCpolynomial(send_buffer);   // Making CRC
+						sprintf(SCRC, "%d ", send_CRC);   // adding CRC
+						strcat(temp_buffer, send_buffer);   //append data to packet header
+						strcat(SCRC, temp_buffer);   // append packet|data to CRC
+						strcpy(send_buffer, SCRC);   //the complete packet
+						send_unreliably(s,send_buffer,(result->ai_addr));
+
+						data_vector->ResetTimer(i);
+					}
+				}
+			}
+
 //********************************************************************
 //IDENTIFY server's IP address and port number.
 //********************************************************************
