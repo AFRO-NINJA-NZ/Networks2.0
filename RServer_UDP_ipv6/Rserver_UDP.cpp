@@ -90,13 +90,10 @@ public:
 		for (int i = 0; i<count; ++i) {
 			 if (allData[i] == NULL) {
 				 cout<<"NONE"<<endl;
-			 } else {
+			 }else {
 				 cout<<i<<") "<<allData[i]->data<<endl;
 			 }
 		}
-	}
-	int GetCount() {
-		return count;
 	}
 };
 
@@ -341,6 +338,8 @@ int main(int argc, char *argv[]) {
 
 //********************************************************************
 
+	int expectedAck = 0;
+
 //INFINITE LOOP
 //********************************************************************
    while (1) {
@@ -411,29 +410,19 @@ int main(int argc, char *argv[]) {
 
 		extractTokens(receive_buffer, CRC, command, packetNumber, data);
 		calculated_CRC = CRCpolynomial(data);
-		//cout << "recieve" << receive_buffer << "\nCRC value is: " << CRC << " cmd: " << command << " from \"" << data  << "\"" << endl;
-		if (strncmp(receive_buffer,"CLOSE",5)==0)  {//if client says "CLOSE", the last packet for the file was sent. Close the file
-			//Remember that the packet carrying "CLOSE" may be lost or damaged as well!
-			printf("Close\n");
-			fclose(fout);
-			closesocket(s);
-			// printf("Server saved data_received.txt \n");//you have to manually check to see if this file is identical to file1_Windows.txt
-			// printf("Closing the socket connection and Exiting...\n");
-			break;
-		} else if(CRC != calculated_CRC) {
-			printf("CRC != CRC\n");
-			// printf("**Packet corupted**\n");
+		cout << "\nCRC value is: " << CRC << " vs " << calculated_CRC << " from \"" << data  << "\""<< endl;
+
+		if(CRC != calculated_CRC) {
+			printf("**Packet corupted**\n");
 			addAckHeader(send_buffer, packetNumber, false);
 			send_unreliably(s,send_buffer,(sockaddr*)&clientAddress);
 		}	else if (CRC == calculated_CRC) {
-			printf("CRC == CRC\n");
 			if (strncmp(command,"PACKET",6) == 0) {
 				//send ACK ureliably
-				printf("strncmp == PACKET\n");
 				addAckHeader(send_buffer, packetNumber, true);
 				send_unreliably(s,send_buffer,(sockaddr*)&clientAddress);
-				// cout << "expectedAck is: " << expectedAck << " packetNumber is: " << packetNumber << endl;
-				// cout << "receive_buffer is: \"" << receive_buffer << "\"" << endl;
+				cout << "expectedAck is: " << expectedAck << " packetNumber is: " << packetNumber << endl;
+				cout << "receive_buffer is: \"" << receive_buffer << "\"" << endl;
 
 				// store the packet's data into a file
 				data_vector->InsertLine(data, packetNumber);
@@ -442,12 +431,31 @@ int main(int argc, char *argv[]) {
 	 	 		cout<<"OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO\n\n"<<endl;
 				// Instead save into vector
 				// save_line_without_header(receive_buffer,fout);
+				if(expectedAck == packetNumber){
+					fprintf(fout, "%s\n", data);
+	        	// save_line_without_header(receive_buffer,fout);
+	          expectedAck++;
+	      }
 			} else {
-				printf("Final else\n");
 			 	addAckHeader(send_buffer, packetNumber, false);
 			 	send_unreliably(s,send_buffer,(sockaddr*)&clientAddress);
 			}
-		}
+		} else {
+			if (strncmp(receive_buffer,"CLOSE",5)==0)  {//if client says "CLOSE", the last packet for the file was sent. Close the file
+				//Remember that the packet carrying "CLOSE" may be lost or damaged as well!
+				fclose(fout);
+				closesocket(s);
+				printf("Server saved data_received.txt \n");//you have to manually check to see if this file is identical to file1_Windows.txt
+				printf("Closing the socket connection and Exiting...\n");
+				break;
+			} else {//it is not a PACKET nor a CLOSE; therefore, it might be a damaged packet
+			   //Are you going to do nothing, ignoring the damaged packet?
+			   //Or, send a negative ACK? It is up to you to decide here.
+		 			addAckHeader(send_buffer, packetNumber, false);
+					send_unreliably(s,send_buffer,(sockaddr*)&clientAddress);
+					break;
+			 }
+		 }
 	}
 
    closesocket(s);
