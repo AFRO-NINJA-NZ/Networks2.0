@@ -437,9 +437,6 @@ int main(int argc, char *argv[]) {
 
 				// store the packet's data into a file
 				data_vector->InsertLine(data, packetNumber);
-	 	 		cout<<"OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO\n\n"<<endl;
-	 	 		data_vector->Print();
-	 	 		cout<<"OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO\n\n"<<endl;
 				// Instead save into vector
 				// save_line_without_header(receive_buffer,fout);
 			} else {
@@ -448,6 +445,10 @@ int main(int argc, char *argv[]) {
 			 	send_unreliably(s,send_buffer,(sockaddr*)&clientAddress);
 			}
 		}
+
+		 	 cout<<"OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO\n\n"<<endl;
+			 data_vector->Print();
+			 cout<<"OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO\n\n"<<endl;
 	}
 
    closesocket(s);

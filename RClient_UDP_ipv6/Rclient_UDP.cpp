@@ -80,6 +80,7 @@ class Client_vector {
 private:
 	Data *allData[200000];
 	int count;
+	int ackcount;
 public:
 	Client_vector() {
 		count = 0;
@@ -118,9 +119,12 @@ public:
 	}
 	void UpdateACK (int position) {
 		allData[position]->acked = true;
+		ackcount++;
 	}
 
 	int GetCount() {return count;}
+
+	int GetACKCount() { return ackcount; }
 
 };
 
@@ -241,21 +245,21 @@ int main(int argc, char *argv[]) {
 		if (!feof(fin)) {
 			fgets(send_buffer,SEGMENT_SIZE,fin); //get one line of data from the file
 
-			data_vector->InsertLine(send_buffer, counter);		//Adding data to vector
+				data_vector->InsertLine(send_buffer, counter);		//Adding data to vector
 
-			sprintf(temp_buffer,"PACKET %d ",counter);  //create packet header with Sequence number
-			send_buffer[strlen(send_buffer) - 2] = '\0';
-			send_CRC = CRCpolynomial(send_buffer);   // Making CRC
-			//cout << "CRC is performed on \"" << send_buffer << "\"" << endl;
-			counter++;
-			sprintf(SCRC, "%d ", send_CRC);   // adding CRC
-			strcat(temp_buffer, send_buffer);   //append data to packet header
-			strcat(SCRC, temp_buffer);
-			strcpy(send_buffer, SCRC);   //the complete packet
-			printf("\n======================================================\n");
-			//cout << "calling send_unreliably, to deliver data of size " << strlen(send_buffer) << " where info is " << send_buffer << endl;
-			send_unreliably(s,send_buffer,(result->ai_addr)); //send the packet to the unreliable data channel
-			Sleep(1);  //sleep for 1 millisecond
+				sprintf(temp_buffer,"PACKET %d ",counter);  //create packet header with Sequence number
+				send_buffer[strlen(send_buffer) - 2] = '\0';
+				send_CRC = CRCpolynomial(send_buffer);   // Making CRC
+				//cout << "CRC is performed on \"" << send_buffer << "\"" << endl;
+				counter++;
+				sprintf(SCRC, "%d ", send_CRC);   // adding CRC
+				strcat(temp_buffer, send_buffer);   //append data to packet header
+				strcat(SCRC, temp_buffer);
+				strcpy(send_buffer, SCRC);   //the complete packet
+				printf("\n======================================================\n");
+				//cout << "calling send_unreliably, to deliver data of size " << strlen(send_buffer) << " where info is " << send_buffer << endl;
+				send_unreliably(s,send_buffer,(result->ai_addr)); //send the packet to the unreliable data channel
+				Sleep(1);  //sleep for 1 millisecond
 
 
 	//********************************************************************
@@ -328,6 +332,7 @@ int main(int argc, char *argv[]) {
 				} else if ((strncmp(command,"NACK",4)==0) && !data_vector->AckedStatus(packetNumber)) {
 					memset(send_buffer,0,sizeof(send_buffer));
 					memset(temp_buffer,0,sizeof(temp_buffer));
+
 					memset(SCRC,0,sizeof(SCRC));
 					// Resend data at vector position packetNumber
 					string temp = data_vector->GetData(packetNumber);
@@ -342,13 +347,13 @@ int main(int argc, char *argv[]) {
 					cout << "Resending NACKED packet of: " << send_buffer << " from position " << packetNumber << " from the vector." << endl;
 					send_unreliably(s,send_buffer,(result->ai_addr));
 					data_vector->ResetTimer(packetNumber);
-					Sleep(1);
 				}
+
 				int count = data_vector->GetCount();
 				cout<<"\nCHECKING EXPIRED TIMER"<<endl;
 				for (int i = 0; i<count; ++i) {
 					if (!data_vector->AckedStatus(i)) {
-						if ((clock() - data_vector->TimerValue(i)) > 10) {
+						if ((clock() - data_vector->TimerValue(i)) > 3) {
 							cout << "Resending timed out packet... ";
 							memset(send_buffer,0,sizeof(send_buffer));
 							memset(temp_buffer,0,sizeof(temp_buffer));
@@ -365,8 +370,6 @@ int main(int argc, char *argv[]) {
 							strcpy(send_buffer, SCRC);   //the complete packet
 							cout << "Expired timer packet sending " << send_buffer << " from position " << i << endl;
 							send_unreliably(s,send_buffer,(result->ai_addr));
-							Sleep(5);
-
 							data_vector->ResetTimer(i);
 						}
 					}
@@ -374,6 +377,9 @@ int main(int argc, char *argv[]) {
 			}
 
 		} else {
+		 	cout<<"\nooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo\n"<<endl;
+		  data_vector->Print();
+		  cout<<"\nooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo\n"<<endl;
 			fclose(fin);
 			printf("End-of-File reached. \n");
 			memset(send_buffer, 0, sizeof(send_buffer));
@@ -385,9 +391,6 @@ int main(int argc, char *argv[]) {
 		}
 
    } //while loop
-	 cout<<"\nooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo\n"<<endl;
-	 data_vector->Print();
-	 cout<<"\nooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo\n"<<endl;
 //*******************************************************************
 //CLOSESOCKET
 //*******************************************************************
