@@ -124,7 +124,7 @@ int send_unreliably(int s,const char *send_buffer, struct sockaddr* remoteaddres
 		if (fate==0){//fate=0 (ok)  or 1 (damaged) or 2 (lost)
             numOfPacketsUncorrupted++;
 			bytes = sendto(s, tmp_send_buffer, strlen(tmp_send_buffer),0,(struct sockaddr *)(remoteaddress),sizeof(sockaddr_storage) );
-			printf("<-- SEND: \"%s\", %d elements\n",tmp_send_buffer,int(strlen(tmp_send_buffer)));
+			printf("<-- SEND: %s,%d elements\n",tmp_send_buffer,int(strlen(tmp_send_buffer)));
 			if (bytes < 0) {
 				printf("send failed\n");
 				exit(1);

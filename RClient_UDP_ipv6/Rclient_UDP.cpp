@@ -42,6 +42,7 @@
 #endif
 
 #include "myrandomizer.h"
+
 #define GENERATOR 0x8005 //0x8005, generator for polynomial division
 
 using namespace std;
@@ -61,11 +62,6 @@ int numOfPacketsUncorrupted=0;
 
 int packets_damagedbit=0;
 int packets_lostbit=0;
-unsigned int send_CRC;
-unsigned int recv_CRC;
-
-unsigned int CRCpolynomial(char *buffer);
-void extractTokens(char *str, unsigned int &CRC, char *command, int &packetNumber, char *data);
 
 
 // Storing data in a custom vector
@@ -81,9 +77,12 @@ private:
 	Data *allData[200000];
 	int count;
 	int ackcount;
+	int last;
 public:
 	Client_vector() {
 		count = 0;
+		ackcount = 0;
+		last = 0;
 		for (int i = 0; i<200000; ++i) {
 			allData[i] = NULL;
 		}
@@ -101,11 +100,11 @@ public:
 		// }
 	};
 	void Print() {
-		for (int i = 0; i<count; ++i) {
+		for (int i = 0; i<last; ++i) {
 			 if (allData[i] == NULL) {
 				 cout<<"NONE"<<endl;
 			 }else {
-				 cout<<i<<") "<<allData[i]->data<<endl;
+				 cout<<i<<") "<<allData[i]->data<<" "<<allData[i]->acked<<endl;
 			 }
 		}
 	}
@@ -113,28 +112,112 @@ public:
 		return allData[position]->data;
 	}
 
-
 	void ResetTimer (int position) {
 		allData[position]->timer = clock();
 	}
 	void UpdateACK (int position) {
-		allData[position]->acked = true;
-		ackcount++;
+		if (allData[position]->acked == false) {
+			ackcount++;
+			allData[position]->acked = true;
+		}
 	}
 
-	int GetCount() {return count;}
+	bool IfExists(int position){
+		if (allData[position]!=NULL) {return true;}
+		else {return false;}
+	}
 
-	int GetACKCount() { return ackcount; }
+	int GetCount(){return count;}
+
+	int GetACKCount(){return ackcount;}
+
+	int GetLast(){return last;}
 
 };
 
 void Client_vector::InsertLine(string data, int position) {
-	allData[position] = new Data();
-	allData[position]->data = data;
-	allData[position]->acked = false;
-	allData[position]->timer = clock();
-	count++;
+	if (allData[position] == NULL) {
+		allData[position] = new Data();
+		count++;
+		allData[position]->data = data;
+		allData[position]->acked = false;
+		allData[position]->timer = clock();
+	}
+
+	if (last < count) {
+		last = count;
+	}
 }
+
+
+
+unsigned int CRCpolynomial(char *buffer){
+	unsigned char i;
+	unsigned int rem=0x0000;
+        unsigned int bufsize=strlen(buffer);
+	while(bufsize--!=0){
+		for(i=0x80;i!=0;i/=2){
+			if((rem&0x8000)!=0){
+				rem=rem<<1;
+				rem^=GENERATOR;
+			}
+     		else{
+	   	   rem=rem<<1;
+		   }
+	  		if((*buffer&i)!=0){
+			   rem^=GENERATOR;
+			}
+		}
+		buffer++;
+	}
+	rem=rem&0xffff;
+	return rem;
+}
+
+
+void extractTokens(char *str, int &CRC, char *command, int &packetNumber, char *data){
+	char * pch;
+
+  int tokenCounter=0;
+  // printf ("Splitting string \"%s\" into tokens:\n\n",str);
+
+  while (1)
+  {
+	 if(tokenCounter ==0){
+       pch = strtok (str, " ,.-'\r\n'");
+    } else {
+		 pch = strtok (NULL, " ,.-'\r\n'");
+	 }
+	 if(pch == NULL) break;
+	//  printf ("Token[%d], with %d characters = %s\n",tokenCounter,int(strlen(pch)),pch);
+
+	 if (tokenCounter > 3) {
+		strcat(data, " ");
+		strcat(data, pch);
+	}
+    switch(tokenCounter){
+      case 0: CRC = atoi(pch);
+			     break;
+      case 1: //command = new char[strlen(pch)];
+			     strcpy(command, pch);
+
+		        // printf("command = %s, %d characters\n", command, int(strlen(command)));
+              break;
+		  case 2: packetNumber = atoi(pch);
+		        break;
+		  case 3: //data = new char[strlen(pch)];
+			     strcpy(data, pch);
+
+		        // printf("data = %s, %d characters\n", data, int(strlen(data)));
+              break;
+    }
+
+	 tokenCounter++;
+  }
+	// printf("data = %s, %d characters\n", data, int(strlen(data)));
+}
+
+
 
 /////////////////////////////////////////////////////////////////////////////////////////
 int main(int argc, char *argv[]) {
@@ -151,9 +234,11 @@ int main(int argc, char *argv[]) {
    randominit();
    SOCKET s;
    char send_buffer[BUFFER_SIZE],receive_buffer[BUFFER_SIZE];
+	 char s_CRC[256];
    int n,bytes,addrlen;
 
 	 Client_vector *data_vector = new Client_vector();
+
 
 	addrlen=sizeof(struct sockaddr);
 
@@ -217,15 +302,14 @@ int main(int argc, char *argv[]) {
    }
 
    cout << "==============<< UDP CLIENT >>=============" << endl;
-   cout << "channel can damage packets = " << packets_damagedbit << endl;
-   cout << "channel can lose packets = " << packets_lostbit << endl;
+   cout << "channel can damage packets=" << packets_damagedbit << endl;
+   cout << "channel can lose packets=" << packets_lostbit << endl;
 
 //*******************************************************************
 //SEND A TEXT FILE
 //*******************************************************************
    int counter=0;
    char temp_buffer[BUFFER_SIZE];
-	 char SCRC[sizeof(unsigned int)];
    FILE *fin=fopen("data_for_transmission.txt","rb"); //original
 
 //In text mode, carriage return�linefeed combinations
@@ -239,158 +323,154 @@ int main(int argc, char *argv[]) {
 	   exit(0);
    } else {
 	   printf("data_for_transmission.txt is now open for sending\n");
-	}
+	 }
    while (1){
 		memset(send_buffer, 0, sizeof(send_buffer));//clean up the send_buffer before reading the next line
 		if (!feof(fin)) {
-			fgets(send_buffer,SEGMENT_SIZE,fin); //get one line of data from the file
-
-				data_vector->InsertLine(send_buffer, counter);		//Adding data to vector
-
+			if ((data_vector->GetCount() - data_vector->GetACKCount()) < 4) {
+				fgets(send_buffer,SEGMENT_SIZE,fin); //get one line of data from the file
+				int len = strlen(send_buffer);
+				if (send_buffer[len-1] == '\n') {
+					send_buffer[len-1] = '\0';
+					send_buffer[len-2] = '\0';
+				}
+				data_vector->InsertLine(send_buffer, counter);
 				sprintf(temp_buffer,"PACKET %d ",counter);  //create packet header with Sequence number
-				send_buffer[strlen(send_buffer) - 2] = '\0';
-				send_CRC = CRCpolynomial(send_buffer);   // Making CRC
-				//cout << "CRC is performed on \"" << send_buffer << "\"" << endl;
 				counter++;
-				sprintf(SCRC, "%d ", send_CRC);   // adding CRC
-				strcat(temp_buffer, send_buffer);   //append data to packet header
-				strcat(SCRC, temp_buffer);
-				strcpy(send_buffer, SCRC);   //the complete packet
+				strcat(temp_buffer,send_buffer);   //append data to packet header
+				strcpy(send_buffer,temp_buffer);   //the complete packet
+				unsigned int cal_CRC = CRCpolynomial(send_buffer);
+				sprintf(s_CRC, "%d ", cal_CRC);
+				strcat(s_CRC, send_buffer);
+				strcpy(send_buffer, s_CRC);
 				printf("\n======================================================\n");
-				//cout << "calling send_unreliably, to deliver data of size " << strlen(send_buffer) << " where info is " << send_buffer << endl;
+				// cout << "calling send_unreliably, to deliver data of size " << strlen(send_buffer) << endl;
 				send_unreliably(s,send_buffer,(result->ai_addr)); //send the packet to the unreliable data channel
 				Sleep(1);  //sleep for 1 millisecond
+			}
+		} else if (feof(fin) && data_vector->GetLast() == data_vector->GetACKCount()) {
 
-
-	//********************************************************************
-	//IDENTIFY server's IP address and port number.
-	//********************************************************************
-			unsigned int CRC = 0;   // starts as false
-			char command[256];
-			char data[256];
-			int packetNumber = -2;
-			unsigned int calculated_CRC = 0;
-			char temp[5];
-			addrlen = sizeof(remoteaddr); //IPv4 & IPv6-compliant
-			memset(receive_buffer,0,sizeof(receive_buffer));
-			bytes = recvfrom(s, receive_buffer, 78, 0,(struct sockaddr*)&remoteaddr,&addrlen);
-
-			char serverHost[NI_MAXHOST];
-	    char serverService[NI_MAXSERV];
-	    memset(serverHost, 0, sizeof(serverHost));
-	    memset(serverService, 0, sizeof(serverService));
-
-
-	    getnameinfo((struct sockaddr *)&remoteaddr, addrlen,
-	                  serverHost, sizeof(serverHost),
-	                  serverService, sizeof(serverService),
-	                  NI_NUMERICHOST);
-
-
-
-	    printf("\nReceived a packet of size %d bytes from <<<UDP Server>>> with IP address: %s, at Port: %s\n", bytes, serverHost, serverService);
-
-	//********************************************************************
-	//PROCESS REQUEST
-	//********************************************************************
-				// //Remove trailing CR and LN
-				if( bytes != SOCKET_ERROR ){
-					n=0;
-					while (n<bytes){
-						n++;
-						if ((bytes <= 0)) break;
-						if (receive_buffer[n] == '\n') { /*end on a LF*/
-							receive_buffer[n] = '\0';
-							break;
-						}
-						if (receive_buffer[n] == '\r') /*ignore CRs*/
-						receive_buffer[n] = '\0';
-					}
-					// printf("RECEIVED --> %s, %d elements\n",receive_buffer, int(strlen(receive_buffer)));
-				}
-
-			//CRC Packet %d
-//********************************************************************
-//RECEIVE
-//********************************************************************
-
-			if (bytes != -1) {
-				extractTokens(receive_buffer, CRC, command, packetNumber, data);
-				memset(data,0,sizeof(data));
-				sprintf(data, "%s ", command);
-				sprintf(temp, "%d", packetNumber);
-				strcat(data, temp);
-				calculated_CRC = CRCpolynomial(data);
-				cout << "calculated_CRC: " << calculated_CRC << " CRC: " << CRC << " Data: " << data << endl;
-				if (strncmp(command,"ACK",3)==0) {
-					if (calculated_CRC == CRC) {
-						// Vector at position packetNumber changed to ACK
-						data_vector->UpdateACK(packetNumber);
-						cout << "Data_vector ACKED at position: " << packetNumber << endl;
-					}
-					// If CRC doesnt match then timer takes care of corrupted ACK
-				} else if ((strncmp(command,"NACK",4)==0) && !data_vector->AckedStatus(packetNumber)) {
-					memset(send_buffer,0,sizeof(send_buffer));
-					memset(temp_buffer,0,sizeof(temp_buffer));
-
-					memset(SCRC,0,sizeof(SCRC));
-					// Resend data at vector position packetNumber
-					string temp = data_vector->GetData(packetNumber);
-					memcpy(send_buffer,temp.c_str(),temp.length());
-					//sprintf(send_buffer, "%s ", data_vector->GetData(packetNumber));
-					sprintf(temp_buffer,"PACKET %d ",packetNumber);  //create packet header with Sequence number
-					send_CRC = CRCpolynomial(send_buffer);   // Making CRC
-					sprintf(SCRC, "%d ", send_CRC);   // adding CRC
-					strcat(temp_buffer, send_buffer);   //append data to packet header
-					strcat(SCRC, temp_buffer);   // append packet|data to CRC
-					strcpy(send_buffer, SCRC);   //the complete packet
-					cout << "Resending NACKED packet of: " << send_buffer << " from position " << packetNumber << " from the vector." << endl;
-					send_unreliably(s,send_buffer,(result->ai_addr));
-					data_vector->ResetTimer(packetNumber);
-				}
-
-				int count = data_vector->GetCount();
-				cout<<"\nCHECKING EXPIRED TIMER"<<endl;
-				for (int i = 0; i<count; ++i) {
-					if (!data_vector->AckedStatus(i)) {
-						if ((clock() - data_vector->TimerValue(i)) > 3) {
-							cout << "Resending timed out packet... ";
-							memset(send_buffer,0,sizeof(send_buffer));
-							memset(temp_buffer,0,sizeof(temp_buffer));
-							memset(SCRC,0,sizeof(SCRC));
-							// Resend data at vector position packetNumber
-							string temp = data_vector->GetData(i);
-							memcpy(send_buffer,temp.c_str(),temp.length());
-							//sprintf(send_buffer, "%s ", data_vector->GetData(packetNumber));
-							sprintf(temp_buffer,"PACKET %d ",i);  //create packet header with Sequence number
-							send_CRC = CRCpolynomial(send_buffer);   // Making CRC
-							sprintf(SCRC, "%d ", send_CRC);   // adding CRC
-							strcat(temp_buffer, send_buffer);   //append data to packet header
-							strcat(SCRC, temp_buffer);   // append packet|data to CRC
-							strcpy(send_buffer, SCRC);   //the complete packet
-							cout << "Expired timer packet sending " << send_buffer << " from position " << i << endl;
-							send_unreliably(s,send_buffer,(result->ai_addr));
-							data_vector->ResetTimer(i);
-						}
-					}
-				}
+			if (fin != NULL) {
+				fclose(fin);
+				printf("End-of-File reached. \n");
 			}
 
-		} else {
-		 	cout<<"\nooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo\n"<<endl;
-		  data_vector->Print();
-		  cout<<"\nooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooo\n"<<endl;
-			fclose(fin);
-			printf("End-of-File reached. \n");
 			memset(send_buffer, 0, sizeof(send_buffer));
 			sprintf(send_buffer,"CLOSE \r\n"); //send a CLOSE command to the RECEIVER (Server)
 			printf("\n======================================================\n");
 
 			send_unreliably(s,send_buffer,(result->ai_addr));
 			break;
+
 		}
 
+
+		//********************************************************************
+		//RECEIVE
+		//********************************************************************
+					addrlen = sizeof(remoteaddr); //IPv4 & IPv6-compliant
+					memset(receive_buffer, 0, sizeof(receive_buffer));
+					bytes = recvfrom(s, receive_buffer, 78, 0,(struct sockaddr*)&remoteaddr,&addrlen);
+		//********************************************************************
+		//IDENTIFY server's IP address and port number.
+		//********************************************************************
+				char serverHost[NI_MAXHOST];
+		    char serverService[NI_MAXSERV];
+		    memset(serverHost, 0, sizeof(serverHost));
+		    memset(serverService, 0, sizeof(serverService));
+
+
+		    getnameinfo((struct sockaddr *)&remoteaddr, addrlen,
+		                  serverHost, sizeof(serverHost),
+		                  serverService, sizeof(serverService),
+		                  NI_NUMERICHOST);
+
+
+
+		    printf("\nReceived a packet of size %d bytes from <<<UDP Server>>> with IP address:%s, at Port:%s\n",bytes,serverHost, serverService);
+
+		//********************************************************************
+		//PROCESS REQUEST
+		//********************************************************************
+					//Remove trailing CR and LN
+					if( bytes != SOCKET_ERROR ){
+						n=0;
+						while (n<bytes){
+							n++;
+							if ((bytes < 0) || (bytes == 0)) break;
+							if (receive_buffer[n] == '\n') { /*end on a LF*/
+								receive_buffer[n] = '\0';
+								break;
+							}
+							if (receive_buffer[n] == '\r') /*ignore CRs*/
+							receive_buffer[n] = '\0';
+						}
+						printf("RECEIVED --> %s, %d elements\n",receive_buffer, int(strlen(receive_buffer)));
+					}
+
+					if (bytes != -1) {
+						int CRC = 0;
+						char ack_nack[256];
+						char data[256];
+						char temp[256];
+						int packetNumber = -2;
+						unsigned int cal_CRC;
+
+						extractTokens(receive_buffer, CRC, ack_nack, packetNumber, data);
+						sprintf(temp," %d",packetNumber);
+						strcat(ack_nack, temp);
+						cal_CRC = CRCpolynomial(ack_nack);
+						if ((strncmp(ack_nack,"ACK",3)==0) && CRC == cal_CRC)  {
+							data_vector->UpdateACK(packetNumber);
+						}else if ((strncmp(ack_nack,"NACK",3)==0) && CRC == cal_CRC)  {
+							memset(send_buffer,0,sizeof(send_buffer));
+							memset(temp_buffer,0,sizeof(temp_buffer));
+							strcpy(send_buffer, data_vector->GetData(packetNumber).c_str());
+							sprintf(temp_buffer,"PACKET %d ",packetNumber);  //create packet header with Sequence number
+							strcat(temp_buffer,send_buffer);   //append data to packet header
+							strcpy(send_buffer,temp_buffer);   //the complete packet
+							unsigned int cal_CRC = CRCpolynomial(send_buffer);
+							char s_CRC[256];
+							sprintf(s_CRC, "%d ", cal_CRC);
+							strcat(s_CRC, send_buffer);
+							strcpy(send_buffer, s_CRC);
+							printf("\n======================================================\n");
+							// cout << "calling send_unreliably, to deliver data of size " << strlen(send_buffer) << endl;
+							send_unreliably(s,send_buffer,(result->ai_addr)); //send the packet to the unreliable data channel
+							data_vector->ResetTimer(packetNumber);
+							Sleep(1);  //sleep for 1 millisecond
+						}
+
+						//Resending packets
+						int count = data_vector->GetLast();
+						for (int i=0;i<count;i++) {
+							if (!data_vector->AckedStatus(i) && ((clock()-data_vector->TimerValue(i))>5)) {
+
+								// memset all buffers
+								memset(temp_buffer,0,sizeof(temp_buffer));
+								memset(send_buffer,0,sizeof(send_buffer));
+								memset(s_CRC,0,sizeof(s_CRC));
+								unsigned int re_se_CRC;
+
+								// create packet, header and CRC
+								sprintf(temp_buffer,"PACKET %d ",i);  //create packet header with Sequence number
+								strcpy(send_buffer, data_vector->GetData(i).c_str());
+								strcat(temp_buffer,send_buffer);   //append data to packet header
+								re_se_CRC = CRCpolynomial(temp_buffer);
+								sprintf(s_CRC, "%d ", re_se_CRC);
+								strcat(s_CRC, temp_buffer);
+								strcpy(send_buffer, s_CRC);   //the complete packet
+								send_unreliably(s, send_buffer, (result->ai_addr));
+								data_vector->ResetTimer(i);
+								Sleep(1);
+
+							}
+						}
+
+					}
+
    } //while loop
+
 //*******************************************************************
 //CLOSESOCKET
 //*******************************************************************
@@ -403,66 +483,4 @@ int main(int argc, char *argv[]) {
    cout << "===========================================" << endl;
 
    exit(0);
-}
-
-unsigned int CRCpolynomial(char *buffer){
-	unsigned char i;
-	unsigned int rem=0x0000;
-    unsigned int bufsize=strlen(buffer);
-
-	while(bufsize--!=0){
-		for(i=0x80;i!=0;i/=2){
-			if((rem&0x8000)!=0){
-				rem=rem<<1;
-				rem^=GENERATOR;
-			} else{
-	   	       rem=rem<<1;
-		    }
-	  		if((*buffer&i)!=0){
-			   rem^=GENERATOR;
-			}
-		}
-		buffer++;
-	}
-	rem=rem&0xffff;
-	return rem;
-}
-
-void extractTokens(char *str, unsigned int &CRC, char *command, int &packetNumber, char *data){
-	char * pch;
-  int tokenCounter=0;
-  //printf ("Splitting string \"%s\" into tokens:\n\n",str);
-  while (1)
-  {
-	 if(tokenCounter ==0){
-       pch = strtok (str, " ,.-'\r\n'");
-    } else {
-		 	 pch = strtok (NULL, " ,.-'\r\n'");
-	 }
-	 if(pch == NULL) break;
-	 //printf ("Token[%d], with %d characters = %s\n",tokenCounter,int(strlen(pch)),pch);
-
-	if (tokenCounter > 3) {
-		strcat(data, " ");
-		strcat(data, pch);
-	}
-    switch(tokenCounter){
-      case 0: CRC = atoi(pch);
-			     break;
-      case 1: //command = new char[strlen(pch)];
-			     strcpy(command, pch);
-
-		        printf("command = %s, %d characters\n", command, int(strlen(command)));
-              break;
-		  case 2: packetNumber = atoi(pch);
-		        break;
-		  case 3: //data = new char[strlen(pch)];
-			     strcpy(data, pch);
-
-		        printf("data = %s, %d characters\n", data, int(strlen(data)));
-              break;
-    }
-
-	 tokenCounter++;
-  }
 }

@@ -43,6 +43,8 @@
 
 #include "myrandomizer.h"
 
+#define GENERATOR 0x8005 //0x8005, generator for polynomial division
+
 using namespace std;
 
 #define BUFFER_SIZE 80  //used by receive_buffer and send_buffer
@@ -57,15 +59,7 @@ int numOfPacketsUncorrupted=0;
 int packets_damagedbit=0;
 int packets_lostbit=0;
 
-//*******************************************************************
-//Function to save lines and discard the header
-//*******************************************************************
-//You are allowed to change this. You will need to alter the NUMBER_OF_WORDS_IN_THE_HEADER if you add a CRC
-#define NUMBER_OF_WORDS_IN_THE_HEADER 2
-#define GENERATOR 0x8005 //0x8005, generator for polynomial division
 
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-// Storing data in a custom vector
 
 struct Data {
 	string data;
@@ -76,18 +70,26 @@ class Server_vector {
 private:
 	Data *allData[200000];
 	int count;
+	int last;
 public:
 	Server_vector() {
 		count = 0;
 		for (int i = 0; i<200000; ++i) {
 			allData[i] = NULL;
 		}
+		last = -1;
 	};
 	~Server_vector() {};
 	void InsertLine(string data, int position);
 
+	string GetData(int position) {
+		return allData[position]->data;
+	}
+
+	int GetCount() {return count;}
+
 	void Print() {
-		for (int i = 0; i<count; ++i) {
+		for (int i = 0; i<last; ++i) {
 			 if (allData[i] == NULL) {
 				 cout<<"NONE"<<endl;
 			 } else {
@@ -95,32 +97,89 @@ public:
 			 }
 		}
 	}
-	int GetCount() {
-		return count;
+
+	bool IfExists(int position){
+		if (allData[position] == NULL) {
+			return false;
+		}
+		return true;
 	}
 };
 
 void Server_vector::InsertLine(string data, int position) {
-	allData[position] = new Data();
-	allData[position]->data = data;
-	//allData[position]->acked = false;
-	count++;
+	if (allData[position] == NULL) {
+		allData[position] = new Data();
+		allData[position]->data = data;
+		count++;
+	}
+	if (last <= count) {
+		last = count;
+	}
 }
-//++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+
+void extractTokens(char *str, int &CRC, char *command, int &packetNumber, char *data){
+	char * pch;
+
+  int tokenCounter=0;
+  // printf ("Splitting string \"%s\" into tokens:\n\n",str);
+
+	if (strncmp(str, "CLOSE", 5)==0) {
+		strcpy(command, "CLOSE");
+	}
+
+  while (1)
+  {
+	 if(tokenCounter ==0){
+       pch = strtok (str, " ,.-'\r\n'");
+    } else {
+		 pch = strtok (NULL, " ,.-'\r\n'");
+	 }
+	 if(pch == NULL) break;
+	//  printf ("Token[%d], with %d characters = %s\n",tokenCounter,int(strlen(pch)),pch);
+
+	 if (tokenCounter > 3) {
+		strcat(data, " ");
+		strcat(data, pch);
+	}
+    switch(tokenCounter){
+      case 0: CRC = atoi(pch);
+			     break;
+      case 1: //command = new char[strlen(pch)];
+			     strcpy(command, pch);
+
+		        // printf("command = %s, %d characters\n", command, int(strlen(command)));
+              break;
+		  case 2: packetNumber = atoi(pch);
+		        break;
+		  case 3: //data = new char[strlen(pch)];
+			     strcpy(data, pch);
+
+		        // printf("data = %s, %d characters\n", data, int(strlen(data)));
+              break;
+    }
+
+	 tokenCounter++;
+  }
+	// printf("data = %s, %d characters\n", data, int(strlen(data)));
+}
+
 
 unsigned int CRCpolynomial(char *buffer){
 	unsigned char i;
 	unsigned int rem=0x0000;
-    unsigned int bufsize=strlen(buffer);
-
+        unsigned int bufsize=strlen(buffer);
 	while(bufsize--!=0){
 		for(i=0x80;i!=0;i/=2){
 			if((rem&0x8000)!=0){
 				rem=rem<<1;
 				rem^=GENERATOR;
-			} else{
-	   	       rem=rem<<1;
-		    }
+			}
+     		else{
+	   	   rem=rem<<1;
+		   }
 	  		if((*buffer&i)!=0){
 			   rem^=GENERATOR;
 			}
@@ -130,6 +189,14 @@ unsigned int CRCpolynomial(char *buffer){
 	rem=rem&0xffff;
 	return rem;
 }
+
+
+
+//*******************************************************************
+//Function to save lines and discard the header
+//*******************************************************************
+//You are allowed to change this. You will need to alter the NUMBER_OF_WORDS_IN_THE_HEADER if you add a CRC
+#define NUMBER_OF_WORDS_IN_THE_HEADER 2
 
 void save_line_without_header(char * receive_buffer,FILE *fout){
 	//char *sep = " "; //separator is the space character
@@ -167,72 +234,6 @@ void save_line_without_header(char * receive_buffer,FILE *fout){
 	}
 }
 
-void extractTokens(char *str, unsigned int &CRC, char *command, int &packetNumber, char *data){
-	char * pch;
-  int tokenCounter=0;
-  //printf ("Splitting string \"%s\" into tokens:\n\n",str);
-  while (1)
-  {
-	 if(tokenCounter ==0){
-       pch = strtok (str, " ,.-'\r\n'");
-    } else {
-		 	 pch = strtok (NULL, " ,.-'\r\n'");
-	 }
-	 if(pch == NULL) break;
-	// printf ("Token[%d], with %d characters = %s\n",tokenCounter,int(strlen(pch)),pch);
-
-	if (tokenCounter > 3) {
-		strcat(data, " ");
-		strcat(data, pch);
-	}
-    switch(tokenCounter){
-      case 0: CRC = atoi(pch);
-			     break;
-      case 1: //command = new char[strlen(pch)];
-			     strcpy(command, pch);
-
-		        printf("command = %s, %d characters\n", command, int(strlen(command)));
-              break;
-		  case 2: packetNumber = atoi(pch);
-		        break;
-		  case 3: //data = new char[strlen(pch)];
-			     strcpy(data, pch);
-
-		        printf("data = %s, %d characters\n", data, int(strlen(data)));
-              break;
-    }
-
-	 tokenCounter++;
-  }
-}
-
-
-void addAckHeader(char *send_buffer, int counter, bool ack){
-    char temp_buffer[80];
-    int crc = 0;
-		if (ack) {
-    	sprintf(temp_buffer,"ACK %d",counter); // temp_buffer now = ACK #
-    	strcat(temp_buffer,send_buffer);
-    	strcpy(send_buffer,temp_buffer);
-    	// get crc of send_buffer
-    	crc = CRCpolynomial(send_buffer);
-    	//add a header to the packet with the crc number
-    	sprintf(temp_buffer,"%d ",crc);
-    	strcat(temp_buffer,send_buffer);
-    	strcpy(send_buffer,temp_buffer);
-		} else {
-    	sprintf(temp_buffer,"NACK %d",counter); // temp_buffer now = NACK #
-    	strcat(temp_buffer,send_buffer);
-    	strcpy(send_buffer,temp_buffer);
-    	// get crc of send_buffer
-    	crc = CRCpolynomial(send_buffer);
-    	//add a header to the packet with the crc number
-    	sprintf(temp_buffer,"%d ",crc);
-    	strcat(temp_buffer,send_buffer);
-    	strcpy(send_buffer,temp_buffer);
-		}
-}
-
 #define WSVERS MAKEWORD(2,0)
 WSADATA wsadata;
 
@@ -250,7 +251,7 @@ int main(int argc, char *argv[]) {
 
     SOCKET s;
     char send_buffer[BUFFER_SIZE],receive_buffer[BUFFER_SIZE];
-    int n,bytes,addrlen;
+    int n,bytes = -1,addrlen;
 
 	memset(&hints, 0, sizeof(struct addrinfo));
 
@@ -259,9 +260,10 @@ int main(int argc, char *argv[]) {
 	hints.ai_protocol = IPPROTO_UDP;
 	hints.ai_flags = AI_PASSIVE; // For wildcard IP address
 
+	Server_vector *data_vector = new Server_vector();
+
 
     randominit();
-		Server_vector *data_vector = new Server_vector();
 //********************************************************************
 // WSSTARTUP
 //********************************************************************
@@ -334,9 +336,9 @@ int main(int argc, char *argv[]) {
 //********************************************************************
 // Open file to save the incoming packets
 //********************************************************************
-//In text mode, carriage return–linefeed combinations
+//In text mode, carriage return�linefeed combinations
 //are translated into single linefeeds on input, and
-//linefeed characters are translated to carriage return–linefeed combinations on output.
+//linefeed characters are translated to carriage return�linefeed combinations on output.
 	 FILE *fout=fopen("data_received.txt","w");
 
 //********************************************************************
@@ -344,11 +346,18 @@ int main(int argc, char *argv[]) {
 //INFINITE LOOP
 //********************************************************************
    while (1) {
+//********************************************************************
+//RECEIVE
+//********************************************************************
+//printf("Waiting... \n");
+		addrlen = sizeof(clientAddress); //IPv4 & IPv6-compliant
+		memset(receive_buffer,0,sizeof(receive_buffer));
+		bytes = recvfrom(s, receive_buffer, SEGMENT_SIZE, 0, (struct sockaddr*)&clientAddress, &addrlen);
 
 //********************************************************************
 //IDENTIFY UDP client's IP address and port number.
 //********************************************************************
-		char clientHost[NI_MAXHOST];
+	char clientHost[NI_MAXHOST];
     char clientService[NI_MAXSERV];
     memset(clientHost, 0, sizeof(clientHost));
     memset(clientService, 0, sizeof(clientService));
@@ -358,14 +367,6 @@ int main(int argc, char *argv[]) {
                   clientHost, sizeof(clientHost),
                   clientService, sizeof(clientService),
                   NI_NUMERICHOST);
-
-//********************************************************************
-//RECEIVE
-//********************************************************************
-//printf("Waiting... \n");
-		addrlen = sizeof(clientAddress); //IPv4 & IPv6-compliant
-		memset(receive_buffer,0,sizeof(receive_buffer));
-		bytes = recvfrom(s, receive_buffer, SEGMENT_SIZE, 0, (struct sockaddr*)&clientAddress, &addrlen);
 
 
 
@@ -388,74 +389,83 @@ int main(int argc, char *argv[]) {
 				receive_buffer[n] = '\0';
 		}
 
-		if ((bytes < 0) || (bytes == 0)) break;
+		if ((bytes < 0) || (bytes == 0)) {
+			int count = data_vector->GetCount();
+			for (int i = 0; i<count; ++i) {
+				char data[256];
+				string temp = data_vector->GetData(i);
+				fprintf(fout,"%s\n",temp.c_str());
+			}
+			break;
+		}
 
-		printf("\n================================================\n");
+
 		printf("RECEIVED --> %s \n",receive_buffer);
 
-		//if (strncmp(receive_buffer,"PACKET",6)==0)  {
-		//	sscanf(receive_buffer, "PACKET %d",&counter);
+		int CRC = 0;
+		char command[256];
+		char data[256];
+		int packetNumber = -2;
+		extractTokens(receive_buffer, CRC, command, packetNumber, data);
+		if (strncmp(command,"PACKET",6)==0)  {
 //********************************************************************
 //SEND ACK
 //********************************************************************
-
-		unsigned int CRC = 0;   // starts as false
-		char command[256];
-		char data[256];
-		int packetNumber = -1;
-		unsigned int calculated_CRC = 1;
-
-		memset(data,0,sizeof(data));
-		memset(command,0,sizeof(command));
-		memset(send_buffer,0,sizeof(send_buffer));
-
-		extractTokens(receive_buffer, CRC, command, packetNumber, data);
-		calculated_CRC = CRCpolynomial(data);
-		//cout << "recieve" << receive_buffer << "\nCRC value is: " << CRC << " cmd: " << command << " from \"" << data  << "\"" << endl;
-		if (strncmp(receive_buffer,"CLOSE",5)==0)  {//if client says "CLOSE", the last packet for the file was sent. Close the file
-			//Remember that the packet carrying "CLOSE" may be lost or damaged as well!
-			printf("Close\n");
-			fclose(fout);
-			closesocket(s);
-			// printf("Server saved data_received.txt \n");//you have to manually check to see if this file is identical to file1_Windows.txt
-			// printf("Closing the socket connection and Exiting...\n");
-			break;
-		} else if(CRC != calculated_CRC) {
-			printf("CRC != CRC\n");
-			// printf("**Packet corupted**\n");
-			addAckHeader(send_buffer, packetNumber, false);
-			send_unreliably(s,send_buffer,(sockaddr*)&clientAddress);
-		}	else if (CRC == calculated_CRC) {
-			printf("CRC == CRC\n");
-			if (strncmp(command,"PACKET",6) == 0) {
-				//send ACK ureliably
-				printf("strncmp == PACKET\n");
-				addAckHeader(send_buffer, packetNumber, true);
-				send_unreliably(s,send_buffer,(sockaddr*)&clientAddress);
-				// cout << "expectedAck is: " << expectedAck << " packetNumber is: " << packetNumber << endl;
-				// cout << "receive_buffer is: \"" << receive_buffer << "\"" << endl;
-
-				// store the packet's data into a file
-				data_vector->InsertLine(data, packetNumber);
-				// Instead save into vector
-				// save_line_without_header(receive_buffer,fout);
+			memset(send_buffer,0,sizeof(send_buffer));
+			char temp_buffer[BUFFER_SIZE];
+			memset(temp_buffer,0,sizeof(temp_buffer));
+			sprintf(temp_buffer,"PACKET %d ",packetNumber);
+			strcat(temp_buffer,send_buffer);   //append data to packet header
+			strcpy(send_buffer,temp_buffer);   //the complete packet
+			strcat(send_buffer, data);
+			unsigned int cal_CRC = CRCpolynomial(send_buffer);
+			memset(send_buffer,0,sizeof(send_buffer));
+			if (cal_CRC != CRC) {
+				sprintf(send_buffer,"NACK %d",packetNumber);
 			} else {
-				printf("Final else\n");
-			 	addAckHeader(send_buffer, packetNumber, false);
-			 	send_unreliably(s,send_buffer,(sockaddr*)&clientAddress);
+				data_vector->InsertLine(data, packetNumber);
+				sprintf(send_buffer,"ACK %d",packetNumber);
+			}
+
+			unsigned int new_cal_CRC = CRCpolynomial(send_buffer);
+			char s_CRC[256];
+			sprintf(s_CRC, "%d ", new_cal_CRC);
+			strcat(s_CRC, send_buffer);
+			strcpy(send_buffer, s_CRC);
+
+			//send ACK ureliably
+			send_unreliably(s,send_buffer,(sockaddr*)&clientAddress );
+		} else {
+			if (strncmp(receive_buffer,"CLOSE",5)==0)  {//if client says "CLOSE", the last packet for the file was sent. Close the file
+				//Remember that the packet carrying "CLOSE" may be lost or damaged as well!
+				int count = data_vector->GetCount();
+				for (int i = 0; i<count; ++i) {
+					char data[256];
+					string temp = data_vector->GetData(i);
+					fprintf(fout,"%s\n",temp.c_str());
+				}
+				fclose(fout);
+				closesocket(s);
+				printf("Server saved data_received.txt \n");//you have to manually check to see if this file is identical to file1_Windows.txt
+				printf("Closing the socket connection and Exiting...\n");
+				break;
+			}else {//it is not a PACKET nor a CLOSE; therefore, it might be a damaged packet
+				   //Are you going to do nothing, ignoring the damaged packet?
+				   //Or, send a negative ACK? It is up to you to decide here.
+				// cout<<"none of the options"<<endl;
 			}
 		}
+   }
 
-		 	 cout<<"OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO\n\n"<<endl;
-			 data_vector->Print();
-			 cout<<"OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO\n\n"<<endl;
-	}
+	 data_vector->Print();
 
    closesocket(s);
+
    cout << "==============<< STATISTICS >>=============" << endl;
    cout << "numOfPacketsDamaged=" << numOfPacketsDamaged << endl;
    cout << "numOfPacketsLost=" << numOfPacketsLost << endl;
    cout << "numOfPacketsUncorrupted=" << numOfPacketsUncorrupted << endl;
    cout << "===========================================" << endl;
+
    exit(0);
 }
