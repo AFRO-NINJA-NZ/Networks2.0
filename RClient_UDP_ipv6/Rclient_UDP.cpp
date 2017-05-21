@@ -358,12 +358,11 @@ int main(int argc, char *argv[]) {
 			memset(send_buffer, 0, sizeof(send_buffer));
 			sprintf(send_buffer,"CLOSE \r\n"); //send a CLOSE command to the RECEIVER (Server)
 			printf("\n======================================================\n");
-
-			send_unreliably(s,send_buffer,(result->ai_addr));
+			for (int i = 0; i<10; ++i){
+				send_unreliably(s,send_buffer,(result->ai_addr));
+			}
 			break;
-
 		}
-
 
 		//********************************************************************
 		//RECEIVE
@@ -385,10 +384,6 @@ int main(int argc, char *argv[]) {
 		                  serverService, sizeof(serverService),
 		                  NI_NUMERICHOST);
 
-
-
-		    printf("\nReceived a packet of size %d bytes from <<<UDP Server>>> with IP address:%s, at Port:%s\n",bytes,serverHost, serverService);
-
 		//********************************************************************
 		//PROCESS REQUEST
 		//********************************************************************
@@ -409,6 +404,7 @@ int main(int argc, char *argv[]) {
 					}
 
 					if (bytes != -1) {
+						printf("\nReceived a packet of size %d bytes from <<<UDP Server>>> with IP address:%s, at Port:%s\n",bytes,serverHost, serverService);
 						int CRC = 0;
 						char ack_nack[256];
 						char data[256];
@@ -420,9 +416,9 @@ int main(int argc, char *argv[]) {
 						sprintf(temp," %d",packetNumber);
 						strcat(ack_nack, temp);
 						cal_CRC = CRCpolynomial(ack_nack);
-						if ((strncmp(ack_nack,"ACK",3)==0) && CRC == cal_CRC)  {
+						if ((strncmp(ack_nack,"ACK",3)==0) && CRC == (int) cal_CRC)  {
 							data_vector->UpdateACK(packetNumber);
-						}else if ((strncmp(ack_nack,"NACK",3)==0) && CRC == cal_CRC)  {
+						}else if ((strncmp(ack_nack,"NACK",3)==0) && CRC == (int) cal_CRC)  {
 							memset(send_buffer,0,sizeof(send_buffer));
 							memset(temp_buffer,0,sizeof(temp_buffer));
 							strcpy(send_buffer, data_vector->GetData(packetNumber).c_str());
@@ -440,33 +436,32 @@ int main(int argc, char *argv[]) {
 							data_vector->ResetTimer(packetNumber);
 							Sleep(1);  //sleep for 1 millisecond
 						}
+					}
 
-						//Resending packets
-						int count = data_vector->GetLast();
-						for (int i=0;i<count;i++) {
-							if (!data_vector->AckedStatus(i) && ((clock()-data_vector->TimerValue(i))>5)) {
+					//Resending packets
+					int count = data_vector->GetLast();
+					for (int i=0;i<count;i++) {
+						if (!data_vector->AckedStatus(i) && ((clock()-data_vector->TimerValue(i))>10)) {
 
-								// memset all buffers
-								memset(temp_buffer,0,sizeof(temp_buffer));
-								memset(send_buffer,0,sizeof(send_buffer));
-								memset(s_CRC,0,sizeof(s_CRC));
-								unsigned int re_se_CRC;
+							// memset all buffers
+							memset(temp_buffer,0,sizeof(temp_buffer));
+							memset(send_buffer,0,sizeof(send_buffer));
+							memset(s_CRC,0,sizeof(s_CRC));
+							unsigned int re_se_CRC;
 
-								// create packet, header and CRC
-								sprintf(temp_buffer,"PACKET %d ",i);  //create packet header with Sequence number
-								strcpy(send_buffer, data_vector->GetData(i).c_str());
-								strcat(temp_buffer,send_buffer);   //append data to packet header
-								re_se_CRC = CRCpolynomial(temp_buffer);
-								sprintf(s_CRC, "%d ", re_se_CRC);
-								strcat(s_CRC, temp_buffer);
-								strcpy(send_buffer, s_CRC);   //the complete packet
-								send_unreliably(s, send_buffer, (result->ai_addr));
-								data_vector->ResetTimer(i);
-								Sleep(1);
-
-							}
+							// create packet, header and CRC
+							sprintf(temp_buffer,"PACKET %d ",i);  //create packet header with Sequence number
+							strcpy(send_buffer, data_vector->GetData(i).c_str());
+							strcat(temp_buffer,send_buffer);   //append data to packet header
+							re_se_CRC = CRCpolynomial(temp_buffer);
+							sprintf(s_CRC, "%d ", re_se_CRC);
+							strcat(s_CRC, temp_buffer);
+							strcpy(send_buffer, s_CRC);   //the complete packet
+							send_unreliably(s, send_buffer, (result->ai_addr));
+							data_vector->ResetTimer(i);
+							Sleep(1);
+							break;
 						}
-
 					}
 
    } //while loop

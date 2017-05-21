@@ -392,13 +392,11 @@ int main(int argc, char *argv[]) {
 		if ((bytes < 0) || (bytes == 0)) {
 			int count = data_vector->GetCount();
 			for (int i = 0; i<count; ++i) {
-				char data[256];
 				string temp = data_vector->GetData(i);
 				fprintf(fout,"%s\n",temp.c_str());
 			}
 			break;
 		}
-
 
 		printf("RECEIVED --> %s \n",receive_buffer);
 
@@ -420,7 +418,7 @@ int main(int argc, char *argv[]) {
 			strcat(send_buffer, data);
 			unsigned int cal_CRC = CRCpolynomial(send_buffer);
 			memset(send_buffer,0,sizeof(send_buffer));
-			if (cal_CRC != CRC) {
+			if ((int) cal_CRC != CRC) {
 				sprintf(send_buffer,"NACK %d",packetNumber);
 			} else {
 				data_vector->InsertLine(data, packetNumber);
@@ -440,7 +438,6 @@ int main(int argc, char *argv[]) {
 				//Remember that the packet carrying "CLOSE" may be lost or damaged as well!
 				int count = data_vector->GetCount();
 				for (int i = 0; i<count; ++i) {
-					char data[256];
 					string temp = data_vector->GetData(i);
 					fprintf(fout,"%s\n",temp.c_str());
 				}
@@ -456,8 +453,6 @@ int main(int argc, char *argv[]) {
 			}
 		}
    }
-
-	 data_vector->Print();
 
    closesocket(s);
 
